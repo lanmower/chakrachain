@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.jsdelivr.net/npm/ipfs/dist/index.min.js"></script>
+
+    <script type="text/javascript">
+      const read = async p => {
+          const stream = node.cat(p)
+          let data = ''
+
+          for await (const chunk of stream) {
+            // chunks of data are returned as a Buffer, convert it back to a string
+            data += chunk.toString()
+          }
+          return JSON.parse(data)
+      };
+      document.addEventListener("DOMContentLoaded", async () => {
+        const node = await Ipfs.create({ repo: "ipfs" });
+        window.node = node;
+        const status = node.isOnline() ? "online" : "offline";
+        const params = new URLSearchParams(window.location.search);
+        window.cid = params.get("cid");
+        if(!cid) cid = location.pathname.split("/")[2];
+        if (params.get("token")) {
+          document.getElementById("status").innerHTML += `<a href='?cid=${cid}'>HOME</a>`;
+          for await (const file of node.ls(
+            `/ipfs/${cid}/token/balances/` +
+            params.get("token")
+          )) {
+            const r = await read(file.cid);
+            console.log(r);
+            document.getElementById(
+              "status"
+            ).innerHTML += `<p><a href=""><b>${r.account}</b></a>:${r.balance}</p>`;
+          }
+        } else {
+          console.log(`IPFS: ${status}`);
+          document.getElementById(
+            "status"
+          ).innerHTML = `Node status: ${status}`;
+
+          const block = await read(`/ipfs/${cid}/block`);
+          console.log(block);
+          document.getElementById(
+            "status"
+          ).innerHTML += `<b>Height</b>: ${block.height}\n<b>CID</b>: ${cid}\n<b>JSON</b>: ${JSON.stringify(block, null, 2)}`;
+          console.log('listing', `/ipfs/${cid}/token/tokens`);
+          for await (const file of node.ls(
+            `/ipfs/${cid}/token/tokens`
+          )) {
+            const r = await read(file.cid);
+            console.log(file.cid);
+            document.getElementById(
+              "status"
+            ).innerHTML += `<p><a href="?token=${r.symbol}&cid=${cid}"><b>${r.symbol}</b></a>:${r.circulatingSupply}</p>`;
+          }
+        }
+      });
+    </script>
+  </head>
+
+  <body>
+    <pre id="status"></pre>
+    <script defer>
+      function start() {
+        const block = JSON.stringify(data);
+      }
+    </script>
+  </body>
+</html>

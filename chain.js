@@ -1,17 +1,16 @@
 const { BigNumber } = require("bignumber.js");
 const { VM, VMScript } = require("vm2");
 const validator = require("validator");
-const all = require("it-all");
 const crypto = require('./crypto.js');
 const keys = require('./keys.js')
-
+const fs = require('fs');
 const cache = {
 }
 
-setCache = async (p, name, before = d => d) => {
+setCache = async (ipfs, p, name, before = d => d) => {
     cache[name] = cache[name] || {};
     const update = async () => {
-        let src = await all(ipfs.cat(p));
+        let src = await crypto.read(ipfs, p);
         return {
             time: new Date().getTime(),
             value: before(src)
@@ -21,25 +20,33 @@ setCache = async (p, name, before = d => d) => {
         cache[name][p] = await update();
     }
 }
-getCache = (name, p) => cache[name][p].value;
+getCache = (name, p) => {
+    return cache[name][p].value;
+}
 
 processTransaction = async (ipfs, input, simulation) => {
     const root = "data";
-    const transaction = crypto.verify(input.transaction, keys.publicKey);
+    const transaction = crypto.verify(input.transaction, input.publicKey);
+    const {contract,sender,action} = transaction;
+    if(action == 'setContract') {
+        const time = new Date().getTime();
+        const output = await crypto.write(ipfs, `/data/contracts/${contract}/current`, {code: transaction.payload});
+        return { error:null, result:output, time: new Date().getTime() - time }
+    }
     const parseSrc = (src) => {
         let codetext = `
-        RegExp.prototype.constructor = function () { };RegExp.prototype.exec = function () {  };RegExp.prototype.test = function () {  };const construct = ${src};
+        RegExp.prototype.constructor = function () { };RegExp.prototype.exec = function () {  };RegExp.prototype.test = function () {  };const construct = ${src.code};
         let actions = construct();  
-        api.assert(api.action && typeof api.action === 'string' && typeof actions[api.action] === 'function', 'invalid action');
+        if(!(api.action && typeof api.action === 'string' && typeof actions[api.action] === 'function')) throw new Error('invalid action:'+api.action);
         actions[api.action](api.transaction.payload).then((out)=>{done(null, out)}).catch((e)=>{done(e); console.error(e)})
         `;
         return new VMScript(codetext)
     }
-    await setCache(`/ipfs/${transaction.codecid}`, 'code', parseSrc);
+    await setCache(ipfs, `/data/contracts/${contract}/current`, 'code', parseSrc);
     let api = {
         mkdir: async path => {
             api.writes++;
-            if (!api.simluation) return await ipfs.files.mkdir(`/data/${transaction.contract}/${path}`);
+            if (!api.simluation) return await ipfs.files.mkdir(`/data/contracts/${contract}/${path}`);
             else return null;
         },
         assert: (crit, msg) => {
@@ -52,23 +59,29 @@ processTransaction = async (ipfs, input, simulation) => {
         },
         read: async (p) => {
             api.reads++;
-            const output = await crypto.read(ipfs, `/data/contracts/${transaction.contract}/${p}`);
+            if(api.simulation && api.simwrites && api.simwrites[p]) {
+                return api.simwrites[p];
+            }
+            const output = await crypto.read(ipfs, `/data/contracts/${contract}/${p}`);
             return output;
         },
         write: async (p, input) => {
             if (api.simulation) {
+                if(!api.simwrites) api.simwrites = {};
+                api.simwrites[p] = input;
                 return null;
             }
             api.writes++;
-            return output = await crypto.write(ipfs, `/data/contracts/${transaction.contract}/${p}`, input);
+            return output = await crypto.write(ipfs, `/data/contracts/${contract}/${p}`, input);
         },
         writes: 0,
         reads: 0,
-        simulate: true,
-        sender: transaction.sender,
+        simulation,
+        simwrites:{},
+        sender,
         BigNumber,
         validator,
-        action: transaction.action,
+        action,
         transaction,
         emit: () => { }
     };
@@ -80,18 +93,23 @@ processTransaction = async (ipfs, input, simulation) => {
         vm._context.done = (error, result) => {
             resolve({ error, result, time: new Date().getTime() - time });
         }
-        api.simulation = simulation;
         vm._context.api = api;
         vm._context.console = console;
-        vm.run(getCache('code', `/ipfs/${transaction.codecid}`));
+        try {
+            console.log('running: ', `/data/contracts/${contract}/current`)
+            vm.run(getCache('code', `/data/contracts/${contract}/current`));
+        } catch(e) {
+            console.error(e);
+        }
     })
 };
-
+const code = fs.readFileSync('./tokens.js');
 exports.createBlock = async (ipfs, transactionBuffer) => {
+    
     let parentcid
     try {
         parentcid = (await ipfs.files.stat("/data")).cid;
-        ipfs.pin.add('/ipfs/' + parentcid);
+        await ipfs.pin.add('/ipfs/' + parentcid);
     } catch (e) {
         await ipfs.files.mkdir("/data", { parents: true });
     }
@@ -157,7 +175,7 @@ exports.createBlock = async (ipfs, transactionBuffer) => {
                     parents: true
                 }, keys);
                 const newcid = (await ipfs.files.stat("/data")).cid;
-                if (newcid) ipfs.pin.add('/ipfs/' + newcid);
+                if (newcid) await ipfs.pin.add('/ipfs/' + newcid);
                 
                 calls(newcid);
                 resolve({ transactions, newcid });
@@ -169,7 +187,7 @@ exports.createBlock = async (ipfs, transactionBuffer) => {
                         create: true
                     });
                 }
-                calls(newcid);
+                calls(parentcid);
                 resolve({ parentcid });
             }
         });

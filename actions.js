@@ -5,68 +5,72 @@ const ROOT_TOKEN = 'C';
 const keys = require('./keys.js')
 const crypto = require('./crypto.js');
 
-const transact = (codecid, msg, transactionBuffer, ipfs, action, payload, response) => {
+const transact = (msg, transactionBuffer, ipfs, action, payload, response) => {
     const transaction = crypto.sign({
-        codecid,
-        contract: "token",
+        contract: keys.publicKey,
         action: action.names[0],
         sender: msg.author.id,
         payload
     }, keys.secretKey);
     const account = null;
-    transactionBuffer.push({
-        transaction, account,
-        callback: async (error, data, { simtime, finaltime }, block, newcid) => {
-            if (error && error.message) {
-                msg.reply("error: " + error.message);
+    console.log('pushing to buffer');
+    return new Promise(resolve => {
+        transactionBuffer.push({
+            transaction, account, publicKey: keys.publicKey,
+            callback: async (error, data, { simtime, finaltime }, block, newcid) => {
+                resolve(data);
+                if (error && error.message) {
+                    msg.channel.send(error.message);
+                }
+                else {
+                    let parentcid = newcid.toString();
+                    let data = block;
+                    console.log({ parentcid, data, newcid })
+                    const reply = new Discord.MessageEmbed()
+                        .setTitle(`BLOCK ${data ? data.height : ''} TRANSACTION VERIFIED`)
+                        .setURL(`https://ipfs.io/ipfs/${newcid.toString()}`)
+                        .setAuthor('Chakrachain', 'https://i.imgflip.com/r1u53.jpg', 'https://discord.js.org')
+                        .setDescription(response)
+                        .setFooter(`Chakrachain (SIM:${simtime}/FINAL:${finaltime})`);
+                    msg.channel.send(reply);
+                }
             }
-            else {
-                let parentcid = newcid.toString();
-                let data = block;
-                console.log({parentcid, data, newcid})
-                const reply = new Discord.MessageEmbed()
-                    .setTitle(`BLOCK ${data?data.height:''} TRANSACTION VERIFIED`)
-                    .setURL(`https://ipfs.io/ipfs/${newcid.toString()}`)
-                    .setAuthor('Chakrachain', 'https://i.imgflip.com/r1u53.jpg', 'https://discord.js.org')
-                    .setDescription(response)
-                    .setFooter(`Chakrachain (SIM:${simtime}/FINAL:${finaltime})`);
-                msg.channel.send(reply);
-            }
-        }
-    });
+        });
+
+    })
 
 }
 
-const create = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
+const create = async (msg, ipfs, action, payload, transactionBuffer) => {
     if (!payload.length) {
-        msg.reply('please specify symbol (less than 10 letters, case insensitive)');
+        msg.channel.send('please specify symbol (less than 10 letters, case insensitive)');
         return;
     }
     payload[0] = payload[0].toUpperCase();
-    transact(codecid, msg, transactionBuffer, ipfs, action, payload, "Created " + payload[0] + ", subtracted 10 C");
+    transact(msg, transactionBuffer, ipfs, action, payload, "Created " + payload[0] + ", subtracted 10 C");
 }
 
-const invite = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
+const invite = async (msg, ipfs, action, payload, transactionBuffer) => {
     let channel = msg.channel;
     try {
         const invite = await channel.createInvite({ maxAge: 0, unique: true });
         if (!payload.length) {
-            msg.reply('please specify symbol (less than 10 letters, case insensitive)');
+            msg.channel.send('please specify symbol (less than 10 letters, case insensitive)');
             return;
         }
         payload[0] = payload[0].toUpperCase();
         payload.push(invite.code)
-        transact(codecid, msg, transactionBuffer, ipfs, action, payload, "Edited " + payload[0]);
+        transact(msg, transactionBuffer, ipfs, action, payload, "Edited " + payload[0]);
     } catch (e) {
-        msg.reply("ERROR: " + e.getmessage);
+        msg.channel.send("ERROR: " + e.getmessage);
     }
 }
 
-const issue = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
+const issue = async (msg, ipfs, action, payload, transactionBuffer) => {
     if (payload[0].startsWith("<@"))
         payload[0] = payload[0].replace("<@", "").replace('!', '').replace(">", "");
     if (payload.length < 2) {
-        msg.reply('not enough params, token issue (@user) <amount> <symbol>');
+        msg.channel.send('not enough params, token issue (@user) <amount> <symbol>');
         return;
     }
     if (payload.length < 3) {
@@ -79,32 +83,69 @@ const issue = async (codecid, msg, ipfs, action, payload, transactionBuffer) => 
     payload[2] = (payload[2]).toUpperCase();
     if (!isNumeric(payload[0])) throw Error('Bad account:', payload[0]);
     response = `Issued ${payload[1]} ${payload[2]} to <@!${payload[0]}>`;
-    transact(codecid, msg, transactionBuffer, ipfs, action, payload, response);
+
+    transact(msg, transactionBuffer, ipfs, action, payload, response);
 }
 
-const transfer = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
+const faucet = async (msg, ipfs, action, payload, transactionBuffer) => {
+    if (payload.length < 2) {
+        msg.channel.send('not enough params, faucet <amount> <symbol>');
+        return;
+    }
+    payload[1] = payload[1].toUpperCase();
+    const filter = reaction => reaction.emoji.name === '🍆';
+    const rep = await msg.channel.send('Click on the emoji!')
+    await rep.react('🍆');
+    const collected = await rep.awaitReactions(filter, { time: 10000, max: 10 });
+    const ret = await new Promise(async resolve => {
+        await collected.map(async s => {
+            if (!s || !s.users) return;
+            try {
+                const users = (await s.users.fetch()).keyArray();
+                if (users.includes(msg.author.id)) delete users[msg.author.id];
+                for (user of users) {
+                    if (user != '726135294952341575' && user != msg.author.id) {
+                        //codecid, msg, transactionBuffer, ipfs, action, payload, response
+                        const userCount = users.length - 1;
+                        const input = parseFloat(payload[0]);
+                        const quantity = new BigNumber(input / userCount).toFixed(8)
+                        await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, transactionBuffer, ipfs, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` to <@!${user}>`);
+                    }
+                }
+                if (users.length > 1) resolve(true);
+                else resolve(false);
+            } catch (e) {
+                resolve(false);
+                console.error(e);
+            }
+        })
+    })
+    return ret;
+}
+
+const transfer = async (msg, ipfs, action, payload, transactionBuffer) => {
     if (payload[0].startsWith("<@"))
         payload[0] = payload[0].replace("<@", "").replace('!', '').replace(">", "");
     if (payload.length < 3) {
-        msg.reply('not enough params');
+        msg.channel.send('not enough params');
         return;
     }
     payload[2] = payload[2].toUpperCase();
     if (!isNumeric(payload[0])) throw Error('Bad account:', payload[0]);
-    transact(codecid, msg, transactionBuffer, ipfs, action, payload, `Transferred ${payload[1]} ${payload[2]} to <@!${payload[0]}>`);
+    transact(msg, transactionBuffer, ipfs, action, payload, `Transferred ${payload[1]} ${payload[2]} to <@!${payload[0]}>`);
 
 }
 
-const balances = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
-    const path = `/data/contracts/token/accounts/` + msg.author.id;
+const balances = async (msg, ipfs, action, payload, transactionBuffer) => {
+    const path = `/data/contracts/${keys.publicKey}/accounts/` + msg.author.id;
     const exampleEmbed = new Discord.MessageEmbed()
         .setTitle('BALANCES')
         .setAuthor('Chakrachain', 'https://i.imgflip.com/r1u53.jpg', 'https://discord.js.org')
         .setFooter('Chakrachain');
     try {
         for await (const file of ipfs.files.ls(path)) {
-            const loaded = await crypto.read(ipfs, `/data/contracts/token/balances/${file.name}/${msg.author.id}`);
-            const token = await crypto.read(ipfs, `/data/contracts/token/tokens/${file.name}`);
+            const loaded = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/balances/${file.name}/${msg.author.id}`);
+            const token = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/tokens/${file.name}`);
             if (loaded) exampleEmbed.addFields({ name: file.name, value: (token.invite ? `\n[Join Discord](https://discord.gg/${token.invite})\n` : '') + loaded.balance, inline: true });
         }
         msg.channel.send(exampleEmbed);
@@ -121,8 +162,8 @@ const calculateBalance = (balance, quantity, precision, add) =>
             .minus(quantity)
             .toFixed(precision);
 
-const pools = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
-    const path = `/data/contracts/token/pools/`;
+const pools = async (msg, ipfs, action, payload, transactionBuffer) => {
+    const path = `/data/contracts/${keys.publicKey}/pools/`;
     const exampleEmbed = new Discord.MessageEmbed()
         .setTitle('POOL PRICES')
         .setAuthor('Chakrachain', 'https://i.imgflip.com/r1u53.jpgjpeg', 'https://discord.js.org')
@@ -131,9 +172,9 @@ const pools = async (codecid, msg, ipfs, action, payload, transactionBuffer) => 
     for await (const file of ipfs.files.ls(path)) {
         if (file.type != "directory") continue;
         if (file.name == ROOT_TOKEN) continue;
-        const token = await crypto.read(ipfs, `/data/contracts/token/tokens/${file.name}`);
-        const pool1 = await crypto.read(ipfs, `/data/contracts/token/balances/${file.name}/${ROOT_TOKEN}-pool`);
-        const pool2 = await crypto.read(ipfs, `/data/contracts/token/balances/${ROOT_TOKEN}/${file.name}-pool`);
+        const token = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/tokens/${file.name}`);
+        const pool1 = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/balances/${file.name}/${ROOT_TOKEN}-pool`);
+        const pool2 = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/balances/${ROOT_TOKEN}/${file.name}-pool`);
 
         let poolbalance1 = parseFloat(pool1.balance);
         let poolbalance2 = parseFloat(pool2.balance);
@@ -147,12 +188,12 @@ const pools = async (codecid, msg, ipfs, action, payload, transactionBuffer) => 
     msg.channel.send(exampleEmbed);
 }
 
-const balance = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
+const balance = async (msg, ipfs, action, payload, transactionBuffer) => {
     if (payload.length < 1) {
-        msg.reply('Please specify token.');
+        msg.channel.send('Please specify token.');
     }
     payload[0] = payload[0].toUpperCase();
-    const path = `/data/contracts/token/balances/${payload[0]}/${msg.author.id}`;
+    const path = `/data/contracts/${keys.publicKey}/balances/${payload[0]}/${msg.author.id}`;
     const loaded = await crypto.read(ipfs, path);
     response = `Balance for <@!${msg.author.id}> ${loaded.balance} ${payload[0]}`;
     const exampleEmbed = new Discord.MessageEmbed()
@@ -163,68 +204,91 @@ const balance = async (codecid, msg, ipfs, action, payload, transactionBuffer) =
     msg.channel.send(exampleEmbed);
 }
 
-const help = async (codecid, msg) => {
-    msg.reply(`\`\`\`token create <symbol>
+const help = async (msg) => {
+    msg.channel.send(`\`\`\`You can use this bot to advertise your discord server
+and incentivise your discord community, ChuckRobot is an
+alpha project that runs an P2P cryptographic
+ledger to store your transactional history
+
+Available commands:
+    
+token create <symbol>
 Creates a new token
 
-token issue <@user> <amount> <symbol>
+#issue <@user> <amount> <name>
 issues to user
 
-token issue <amount> <symbol>
+#issue <amount> <name>
 issues to self
 
-token pool <token> <token amount> <${ROOT_TOKEN} amount>
+#pool <token amount> <token> <${ROOT_TOKEN} amount>
 pool token with ${ROOT_TOKEN}
 
-token swap <amount> <from symbol> <to symbol>
+#swap <from symbol> <amount> <to name>
 swaps a token for ${ROOT_TOKEN} or from ${ROOT_TOKEN}
 
-token bals
+#bals
 display balances
 
-token pools
+#pools
 display pools
 
-token send <@user> <amount> <symbol>
-perform a token transfer\`\`\``);
+#pools
+display pools
+
+#send <@user> <amount> <name>
+perform a token transfer
+
+#faucet <amount> <name>
+hand the token out to emoji clickers, after 10 seconds
+
+#autofaucet <amount> <name> <count>
+run autofaucet until x amount of handouts are reached
+
+#invite <name>
+link your token to the current discord channel with an invite
+
+#link
+invite this bot to your discord
+\`\`\``);
 }
 
-const pool = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
+const pool = async (msg, ipfs, action, payload, transactionBuffer) => {
     if (payload.length < 1) {
-        msg.reply('not enough params');
+        msg.channel.send('not enough params');
         return;
     }
     payload[0] = payload[0].toUpperCase();
     if (payload.length < 2) {
-        msg.reply('not enough params');
+        msg.channel.send('not enough params');
         return;
     }
     payload[1] = payload[1].toUpperCase();
     response = `Pooled ${payload[0]} ${payload[1]} against ${payload[2]} ` + ROOT_TOKEN;
-    transact(codecid, msg, transactionBuffer, ipfs, action, payload, response);
+    transact(msg, transactionBuffer, ipfs, action, payload, response);
 }
 
-const link = async (cid, msg) => {
-    msg.reply('https://discord.com/api/oauth2/authorize?client_id=726135294952341575&permissions=18497&scope=bot');
+const link = async (msg) => {
+    msg.channel.send('https://discord.com/api/oauth2/authorize?client_id=726135294952341575&permissions=18497&scope=bot');
 }
 
-const swap = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
+const swap = async (msg, ipfs, action, payload, transactionBuffer) => {
     if (payload.length < 1) {
-        msg.reply('not enough params');
+        msg.channel.send('not enough params');
         return;
     }
     const quantity = parseFloat(payload[0]);
     payload[1] = payload[1].toUpperCase();
     if (payload.length < 2) {
-        msg.reply('not enough params');
+        msg.channel.send('not enough params');
         return;
     }
     let ratio
     symbol1 = payload[1].toUpperCase();
     symbol2 = payload[2].toUpperCase();
     const calcRatio = async (symbol1, symbol2) => {
-        const pool1 = await crypto.read(ipfs, `/data/contracts/token/balances/${symbol1}/${symbol2}-pool`);
-        const pool2 = await crypto.read(ipfs, `/data/contracts/token/balances/${symbol2}/${symbol1}-pool`);
+        const pool1 = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/balances/${symbol1}/${symbol2}-pool`);
+        const pool2 = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/balances/${symbol2}/${symbol1}-pool`);
 
         let poolbalance1 = parseFloat(pool1.balance);
         let poolbalance2 = parseFloat(pool2.balance);
@@ -238,7 +302,7 @@ const swap = async (codecid, msg, ipfs, action, payload, transactionBuffer) => {
         ratio = ratio1 * ratio2;
     }
     response = `Swapped ${payload[0]} ${symbol1} for ${calculateBalance(0, quantity * ratio, 8, true)} ${symbol2}`;
-    transact(codecid, msg, transactionBuffer, ipfs, action, payload, response);
+    transact(msg, transactionBuffer, ipfs, action, payload, response);
 }
 
 exports.actions = [
@@ -269,6 +333,17 @@ exports.actions = [
     {
         names: ['link'],
         call: link
+    },
+    {
+        names: ['faucet'],
+        call: faucet
+    },
+    {
+        names: ['autofaucet'],
+        call: (msg, ipfs, action, payload, transactionBuffer) => {
+            let times = payload[2];
+            const int = setInterval(async () => { if (times < 1) clearInterval(int); if (await faucet(msg, ipfs, action, payload, transactionBuffer)) times--; }, 20000);
+        }
     },
     {
         names: ['pools'],

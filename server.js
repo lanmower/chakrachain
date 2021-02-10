@@ -7,8 +7,9 @@ const IPFS = require("ipfs-core");
 const Discord = require("discord.js");
 const client = new Discord.Client();
 const { actions } = require("./actions.js");
-const {createBlock} = require('./chain.js');
-
+const { createBlock } = require('./chain.js');
+const crypto = require('./crypto.js');
+const keys = require('./keys.js');
 client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
 });
@@ -51,12 +52,24 @@ const run = async ipfs => {
 const ready = async ipfs => {
   const transactionBuffer = [];
   let running = false;
+  const code = fs.readFileSync('./tokens.js').toString();
+  const read = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/current`);
+  const transaction = crypto.sign({
+    contract: keys.publicKey,
+    action: 'setContract',
+    sender: '',
+    payload: code
+  }, keys.secretKey);
+  if (!read||read.code!=code) {
+    transactionBuffer.push({ transaction, account: keys.publicKey, publicKey: keys.publicKey });
+  }
 
   setInterval(async () => {
     if (running) return;
     running = true;
     if (transactionBuffer.length) {
       try {
+        console.log('creating block');
         const cid = await createBlock(ipfs, transactionBuffer);
       } catch (e) {
         console.error("error creating block", e);
@@ -72,7 +85,7 @@ const ready = async ipfs => {
       for (action of actions) {
         if (action.names.includes(name)) {
           try {
-            await action.call(codecid, msg, ipfs, action, payload, transactionBuffer);
+            await action.call(msg, ipfs, action, payload, transactionBuffer);
           } catch (e) {
             console.error(e);
           }

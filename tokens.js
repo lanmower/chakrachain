@@ -231,6 +231,7 @@
     },
     pool: async payload => {
       let [quantity, symbol, rootquantity] = payload;
+      if(symbol == ROOT_TOKEN) throw new Error('can not pool '+ROOT_TOKEN+' try pool a created token')
       api.assert([
         [symbol && typeof symbol === "string", "bad name"],
         [typeof quantity === "string", "quantity must be a string"],
@@ -244,8 +245,9 @@
       const r = await api.read("tokens/" + ROOT_TOKEN);
       if (!token) throw new Error("does not exist")
       api.assert([
-        [decimals(quantity) <= token.precision, "name precision mismatch"],
-        [decimals(rootquantity) <= r.precision, "name precision mismatch"],
+        [token.issuer === api.sender, "only the owner of the token can pool it"],
+        [decimals(quantity) <= token.precision, "precision mismatch on "+token.symbol],
+        [decimals(rootquantity) <= r.precision, "precision mismatch on "+r.symbol],
       ]);
       if (quantity) {
         api.assert(await subBalance(api.sender, token, quantity), 'cannot subtract ' + token.symbol);
@@ -270,7 +272,7 @@
     transfer: async payload => {
       const [to, quantity, symbol] = payload;
       api.assert([
-        [symbol && typeof symbol === "string", "bad name"],
+        [symbol && typeof symbol === "string", "bad name: "+symbol],
         [quantity, "no quantity"],
         [typeof quantity === "string", "quantity must be a string"],
         [!api.BigNumber(quantity).isNaN(), "quantity must be a number"]

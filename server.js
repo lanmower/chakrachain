@@ -85,9 +85,9 @@ const ready = async ipfs => {
   }, 50);
   
   await ipfs.pubsub.subscribe(topic, async (msg) => {
-    const message = packr.unpack(msg)
-    console.log('PINNING HEAD BLOCK', msg.newcid);
-    ipfs.pin(msg.newcid);
+    const message = packr.unpack(msg.data);
+    console.log(message.newcid);
+    ipfs.pin.add('/ipfs/'+message.newcid);
   })
 
   console.log(`subscribed to ${topic}`)

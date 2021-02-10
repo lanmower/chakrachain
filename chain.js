@@ -181,7 +181,7 @@ exports.createBlock = async (ipfs, transactionBuffer) => {
                 const newcid = (await ipfs.files.stat("/data")).cid;
                 if (newcid) await ipfs.pin.add('/ipfs/' + newcid);
                 
-                await ipfs.pubsub.publish(topic, packr.pack({newcid:newcid.toString()}))
+                await ipfs.pubsub.publish(topic, packr.pack({newcid:newcid.toString(), data}))
                 calls(newcid);
                 resolve({ transactions, newcid });
             }

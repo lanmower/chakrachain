@@ -6,7 +6,7 @@ const all = require("it-all");
 const IPFS = require("ipfs-core");
 const Discord = require("discord.js");
 let client;
-if(process.env.DISCORD) client = new Discord.Client();
+if (process.env.DISCORD) client = new Discord.Client();
 const { actions } = require("./actions.js");
 const { createBlock } = require('./chain.js');
 const crypto = require('./crypto.js');
@@ -16,7 +16,7 @@ const topic = 'REPLACE_WITH_GENESIS';
 
 let packr = new Packr({ structuredClone: true });
 
-if(client)client.on("ready", () => {
+if (client) client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
 });
 app.post("/hook", (req, res) => {
@@ -24,7 +24,7 @@ app.post("/hook", (req, res) => {
   res.status(200).end();
 })
 
-if(client) client.login(process.env.DISCORD);
+if (client) client.login(process.env.DISCORD);
 
 const listen = app.listen(1337, () => {
   console.log("Your app is listening on port " + listen.address().port);
@@ -66,7 +66,7 @@ const ready = async ipfs => {
     sender: '',
     payload: code
   }, keys.secretKey);
-  if (!read||read.code!=code) {
+  if (!read || read.code != code) {
     transactionBuffer.push({ transaction, account: keys.publicKey, publicKey: keys.publicKey });
   }
 
@@ -83,16 +83,43 @@ const ready = async ipfs => {
     }
     running = false;
   }, 50);
-  
+
   await ipfs.pubsub.subscribe(topic, async (msg) => {
-    const message = packr.unpack(msg.data);
     console.log(message.newcid);
-    ipfs.pin.add('/ipfs/'+message.newcid);
+    try {
+      const message = packr.unpack(msg.data);
+      ipfs.pin.add('/ipfs/' + message.newcid);
+      if (!keys.secretKey) ipfs.files.cp('/ipfs/' + message.newcid, '/data')
+    } catch (e) {
+      console.error(e);
+    }
   })
 
   console.log(`subscribed to ${topic}`)
+  const getParent = async (p) => {
+    try {
+      const data = await crypto.read(ipfs, p);
+      console.log(data.height);
+      if (data.height == 2) return;
+      return data.parentcid;
+    } catch (e) {
 
-  if(client)client.on("message", async msg => {
+    }
+  }
+  let data = '/data/block';
+  setTimeout(async () => {
+    try {
+      while (data) {
+
+        data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
+        await ipfs.pin.add('/ipfs/' + data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, 0)
+  console.log('pinned all the way back');
+  if (client) client.on("message", async msg => {
     if (msg.content.startsWith("#") || msg.content.startsWith("token ") || msg.content.startsWith("chakra ")) {
       const payload = msg.content.replace("token ", "").replace("#", "").toLowerCase().split(" ").filter(param => (param.trim().length));
       let name = payload.shift();

@@ -88,7 +88,7 @@ const ready = async ipfs => {
     console.log(message.newcid);
     try {
       const message = packr.unpack(msg.data);
-      ipfs.pin.add('/ipfs/' + message.newcid);
+      if(message.newcid) ipfs.pin.add('/ipfs/' + message.newcid);
       if (!keys.secretKey) ipfs.files.cp('/ipfs/' + message.newcid, '/data')
     } catch (e) {
       console.error(e);
@@ -100,7 +100,7 @@ const ready = async ipfs => {
     try {
       const data = await crypto.read(ipfs, p);
       console.log(data.height);
-      if (data.height == 2) return;
+      if (data.height==3) return null;
       return data.parentcid;
     } catch (e) {
 
@@ -112,7 +112,7 @@ const ready = async ipfs => {
       while (data) {
 
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
-        await ipfs.pin.add('/ipfs/' + data);
+        if(data) await ipfs.pin.add('/ipfs/' + data);
       }
     } catch (e) {
       console.error(e);

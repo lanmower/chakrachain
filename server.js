@@ -5,12 +5,18 @@ const app = express();
 const all = require("it-all");
 const IPFS = require("ipfs-core");
 const Discord = require("discord.js");
-const client = new Discord.Client();
+let client;
+if(process.env.DISCORD) client = new Discord.Client();
 const { actions } = require("./actions.js");
 const { createBlock } = require('./chain.js');
 const crypto = require('./crypto.js');
 const keys = require('./keys.js');
-client.on("ready", () => {
+const { Packr } = require('msgpackr');
+const topic = 'REPLACE_WITH_GENESIS';
+
+let packr = new Packr({ structuredClone: true });
+
+if(client)client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
 });
 app.post("/hook", (req, res) => {
@@ -18,7 +24,7 @@ app.post("/hook", (req, res) => {
   res.status(200).end();
 })
 
-client.login(process.env.DISCORD);
+if(client) client.login(process.env.DISCORD);
 
 const listen = app.listen(1337, () => {
   console.log("Your app is listening on port " + listen.address().port);
@@ -77,8 +83,16 @@ const ready = async ipfs => {
     }
     running = false;
   }, 50);
-  const codecid = (await ipfs.add(fs.readFileSync("./tokens.js"))).cid.toString();
-  client.on("message", async msg => {
+  
+  await ipfs.pubsub.subscribe(topic, async (msg) => {
+    const message = packr.unpack(msg)
+    console.log('PINNING HEAD BLOCK', msg.newcid);
+    ipfs.pin(msg.newcid);
+  })
+
+  console.log(`subscribed to ${topic}`)
+
+  if(client)client.on("message", async msg => {
     if (msg.content.startsWith("#") || msg.content.startsWith("token ") || msg.content.startsWith("chakra ")) {
       const payload = msg.content.replace("token ", "").replace("#", "").toLowerCase().split(" ").filter(param => (param.trim().length));
       let name = payload.shift();

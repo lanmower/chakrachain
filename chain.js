@@ -4,6 +4,10 @@ const validator = require("validator");
 const crypto = require('./crypto.js');
 const keys = require('./keys.js')
 const fs = require('fs');
+const topic = 'REPLACE_WITH_GENESIS';
+const { Packr } = require('msgpackr');
+let packr = new Packr({ structuredClone: true });
+
 const cache = {
 }
 
@@ -177,6 +181,7 @@ exports.createBlock = async (ipfs, transactionBuffer) => {
                 const newcid = (await ipfs.files.stat("/data")).cid;
                 if (newcid) await ipfs.pin.add('/ipfs/' + newcid);
                 
+                await ipfs.pubsub.publish(topic, packr.pack({newcid:newcid.toString()}))
                 calls(newcid);
                 resolve({ transactions, newcid });
             }

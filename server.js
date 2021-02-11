@@ -127,9 +127,11 @@ try {
   let data = '/data/block';
 setTimeout(async () => {
     const pins = [];
+    const i = setInterval(()=>{console.log(pins.length)}, 1000);
     for await (const { cid, type } of ipfs.pin.ls()) {
       pins.push(cid.toString());
     }
+    clearInterval();
     console.log('pinning block history');
       try {
       while (data) {

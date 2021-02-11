@@ -91,8 +91,14 @@ const ready = async ipfs => {
     try {
       const message = packr.unpack(msg.data);
       console.log(message)
-      if (message.newcid) ipfs.pin.add('/ipfs/' + message.newcid);
-      if (!keys.secretKey) ipfs.files.cp('/ipfs/' + message.newcid, '/data')
+      if (message.newcid) {
+        await ipfs.pin.add('/ipfs/' + message.newcid);
+        console.log('pinned');
+        if (!keys.secretKey) {
+          await ipfs.files.cp('/ipfs/' + message.newcid, '/data')
+          console.log('added to data');
+        }
+      }
     } catch (e) {
       console.error(e);
     }

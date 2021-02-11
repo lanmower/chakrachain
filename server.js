@@ -98,8 +98,6 @@ const ready = async ipfs => {
           await ipfs.files.rm('/data',{recursive:true})
           await ipfs.files.cp('/ipfs/' + message.newcid, '/data')
           console.log('added to data');
-          const newcid = (await ipfs.files.stat("/data")).cid;
-          console.log('data is', newcid.toString());
         }
       }
     } catch (e) {
@@ -110,6 +108,9 @@ const ready = async ipfs => {
     const peerIds = await ipfs.pubsub.peers(topic)
     console.log(peerIds)
   }, 10000)
+
+  const newcid = (await ipfs.files.stat("/data")).cid;
+  console.log('data is', newcid.toString());
 
   console.log(`subscribed to ${topic}`)
   const getParent = async (p) => {
@@ -123,7 +124,7 @@ const ready = async ipfs => {
     }
   }
   let data = '/data/block';
-  setTimeout(async () => {
+  if(!keys.secretKey) setTimeout(async () => {
     try {
       while (data) {
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');

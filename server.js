@@ -108,10 +108,12 @@ const ready = async ipfs => {
     const peerIds = await ipfs.pubsub.peers(topic)
     console.log(peerIds)
   }, 10000)
-
+try {
   const newcid = (await ipfs.files.stat("/data")).cid;
   console.log('data is', newcid.toString());
-
+}catch(e) {
+  
+}
   console.log(`subscribed to ${topic}`)
   const getParent = async (p) => {
     try {

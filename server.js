@@ -130,6 +130,7 @@ setTimeout(async () => {
     for await (const { cid, type } of ipfs.pin.ls()) {
       pins.push(cid.toString());
     }
+    console.log('pinning block history');
       try {
       while (data) {
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');

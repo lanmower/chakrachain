@@ -111,6 +111,7 @@ const ready = async ipfs => {
   console.log(`subscribed to ${topic}`)
   const getParent = async (p) => {
     try {
+      console.log('reading', p);
       const data = await crypto.read(ipfs, p);
       console.log(data.height);
       if (data.height == 3) return null;

@@ -58,11 +58,11 @@ const run = async ipfs => {
 const ready = async ipfs => {
   const transactionBuffer = [];
   let running = false;
-  const code = fs.readFileSync('./tokens.js').toString();
-  const read = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/current`);
 
   if (keys.secretKey) {
-    const transaction = crypto.sign({
+    const code = fs.readFileSync('./tokens.js').toString();
+    const read = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/current`);
+      const transaction = crypto.sign({
       contract: keys.publicKey,
       action: 'setContract',
       sender: '',

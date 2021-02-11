@@ -93,7 +93,7 @@ const ready = async ipfs => {
       console.log(message, message.newcid)
       if (message.newcid) {
         await ipfs.pin.add('/ipfs/' + message.newcid);
-        console.log('pinned');
+        console.log('pinned', (!keys.secretKey));
         if (!keys.secretKey) {
           await ipfs.files.cp('/ipfs/' + message.newcid, '/data')
           console.log('added to data');
@@ -126,10 +126,14 @@ try {
   }
   let data = '/data/block';
   setTimeout(async () => {
+    const pins = [];
+    for await (const { cid, type } of ipfs.pin.ls()) {
+      pins.push(cid.toString());
+    }
     try {
       while (data) {
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
-        if (data) await ipfs.pin.add('/ipfs/' + data);
+        if (data && !pins.includes(data)) await ipfs.pin.add('/ipfs/' + data);
       }
     } catch (e) {
       console.error(e);

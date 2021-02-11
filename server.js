@@ -90,13 +90,15 @@ const ready = async ipfs => {
   await ipfs.pubsub.subscribe(topic, async (msg) => {
     try {
       const message = packr.unpack(msg.data);
-      console.log(message)
+      console.log(message, message.newcid)
       if (message.newcid) {
         await ipfs.pin.add('/ipfs/' + message.newcid);
         console.log('pinned');
         if (!keys.secretKey) {
           await ipfs.files.cp('/ipfs/' + message.newcid, '/data')
           console.log('added to data');
+          const newcid = (await ipfs.files.stat("/data")).cid;
+          console.log('data is', newcid.toString());
         }
       }
     } catch (e) {
@@ -111,9 +113,7 @@ const ready = async ipfs => {
   console.log(`subscribed to ${topic}`)
   const getParent = async (p) => {
     try {
-      console.log('reading', p);
       const data = await crypto.read(ipfs, p);
-      console.log(data.height);
       if (data.height == 3) return null;
       return data.parentcid;
     } catch (e) {
@@ -124,9 +124,7 @@ const ready = async ipfs => {
   setTimeout(async () => {
     try {
       while (data) {
-        console.log('getting block', data);
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
-        console.log('parent block', data, data.height);
         if (data) await ipfs.pin.add('/ipfs/' + data);
       }
     } catch (e) {

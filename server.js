@@ -62,7 +62,7 @@ const ready = async ipfs => {
   if (keys.secretKey) {
     const code = fs.readFileSync('./tokens.js').toString();
     const read = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/current`);
-      const transaction = crypto.sign({
+    const transaction = crypto.sign({
       contract: keys.publicKey,
       action: 'setContract',
       sender: '',
@@ -107,12 +107,12 @@ const ready = async ipfs => {
     const peerIds = await ipfs.pubsub.peers(topic)
     console.log(peerIds)
   }, 10000)
-try {
-  const newcid = (await ipfs.files.stat("/data")).cid;
-  console.log('data is', newcid.toString());
-}catch(e) {
+  try {
+    const newcid = (await ipfs.files.stat("/data")).cid;
+    console.log('data is', newcid.toString());
+  } catch (e) {
 
-}
+  }
   console.log(`subscribed to ${topic}`)
   const getParent = async (p) => {
     try {
@@ -125,22 +125,19 @@ try {
     }
   }
   let data = '/data/block';
-setTimeout(async () => {
+  setTimeout(async () => {
     const pins = [];
-    const i = setInterval(()=>{console.log(pins.length)}, 1000);
-    for await (const { cid, type } of ipfs.pin.ls()) {
-      pins.push(cid.toString());
-    }
-    clearInterval();
     console.log('pinning block history');
-      try {
+    try {
       while (data) {
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
-        if (data && !pins.includes(data)) await ipfs.pin.add('/ipfs/' + data);
+        pins.push('/ipfs/' + data);
       }
     } catch (e) {
       console.error(e);
     }
+    ipfs.pin.addAll(pins)
+    if (data && !pins.includes(data)) await ipfs.pin.add('/ipfs/' + data);
   }, 0)
   if (client) client.on("message", async msg => {
     if (msg.content.startsWith("#") || msg.content.startsWith("token ") || msg.content.startsWith("chakra ")) {

@@ -22,9 +22,12 @@ const lsign = exports.sign = (obj, key) => {
 };
 
 const lverify = exports.verify = (msg, key) => {
+  if(msg == null) throw new Error('Cannot verify null message');
+  if(key == null) throw new Error('Cannot verify null key');
   const keyUint8Array = new Uint8Array(Buffer.from(key, 'hex'));
   const messageAsUint8Array = msg;
   const outputUint8Array = sign.open(messageAsUint8Array, keyUint8Array);
+  if(!outputUint8Array) throw new Error('Couldnt unpack data with key:', key);
   return packr.unpack(outputUint8Array);
 };
 

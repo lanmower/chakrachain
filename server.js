@@ -13,9 +13,9 @@ const crypto = require('./crypto.js');
 const keys = require('./keys.js');
 const { Packr } = require('msgpackr');
 const topic = 'REPLACE_WITH_GENESIS';
-
+require('events').setMaxListeners(4096);
+require('events').EventEmitter.prototype._maxListeners = 4096;
 let packr = new Packr({ structuredClone: true });
-
 if (client) client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
 });
@@ -106,7 +106,7 @@ const ready = async ipfs => {
   setInterval(async () => {
     const peerIds = await ipfs.pubsub.peers(topic)
     console.log(peerIds)
-  }, 10000)
+  }, 60000)
   try {
     const newcid = (await ipfs.files.stat("/data")).cid;
     console.log('data is', newcid.toString());
@@ -133,7 +133,7 @@ const ready = async ipfs => {
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
         pins.push('/ipfs/' + data);
         if(pins.length > 100) {
-          ipfs.pin.addAll(pins)
+          await ipfs.pin.addAll(pins)
           pins = [];
         }
       }

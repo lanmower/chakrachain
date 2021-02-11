@@ -26,9 +26,9 @@ app.post("/hook", (req, res) => {
 
 if (client) client.login(process.env.DISCORD);
 
-const listen = app.listen(1337, () => {
+/*const listen = app.listen(1336, () => {
   console.log("Your app is listening on port " + listen.address().port);
-});
+});*/
 
 const run = async ipfs => {
   global.ipfs = ipfs;
@@ -124,7 +124,7 @@ const ready = async ipfs => {
     }
   }
   let data = '/data/block';
-  if(!keys.secretKey) setTimeout(async () => {
+  setTimeout(async () => {
     try {
       while (data) {
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');

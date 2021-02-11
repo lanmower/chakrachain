@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node server.js"
   },
-  "dependencies": {
+    "dependencies": {
     "assert": "^2.0.0",
     "bignumber.js": "^9.0.1",
     "body-parser": "^1.19.0",
@@ -18,12 +18,15 @@
     "express": "^4.17.1",
     "gun": "^0.2020.520",
     "ipfs": "^0.54.2",
-    "msgpackr": "^1.2.1",
+    "msgpackr": "^1.2.3",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
     "validator": "^13.5.2",
     "vm2": "^3.9.2"
   },
+  "devDependencies": {
+    "node-pre-gyp": "^0.17.0"
+  }
   "repository": {
     "url": "https://glitch.com/edit/#!/hello-express"
   },
@@ -33,7 +36,5 @@
     "glitch",
     "express"
   ],
-  "devDependencies": {
-    "node-pre-gyp": "^0.17.0"
-  }
+
 }

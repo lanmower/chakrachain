@@ -117,7 +117,7 @@ const ready = async ipfs => {
   const getParent = async (p) => {
     try {
       const data = await crypto.read(ipfs, p);
-      console.log(data);
+      console.log(data.height);
       if (data.height == 3) return null;
       return data.parentcid;
     } catch (e) {
@@ -126,18 +126,21 @@ const ready = async ipfs => {
   }
   let data = '/data/block';
   setTimeout(async () => {
-    const pins = [];
+    let pins = [];
     console.log('pinning block history');
     try {
       while (data) {
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
         pins.push('/ipfs/' + data);
+        if(pins.length > 100) {
+          ipfs.pin.addAll(pins)
+          pins = [];
+        }
       }
     } catch (e) {
       console.error(e);
     }
     ipfs.pin.addAll(pins)
-    if (data && !pins.includes(data)) await ipfs.pin.add('/ipfs/' + data);
   }, 0)
   if (client) client.on("message", async msg => {
     if (msg.content.startsWith("#") || msg.content.startsWith("token ") || msg.content.startsWith("chakra ")) {

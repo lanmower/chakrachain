@@ -125,12 +125,13 @@ try {
     }
   }
   let data = '/data/block';
-  setTimeout(async () => {
+setTimeout(async () => {
     const pins = [];
     for await (const { cid, type } of ipfs.pin.ls()) {
+      console.log({ cid, type })
       pins.push(cid.toString());
     }
-    try {
+      try {
       while (data) {
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
         if (data && !pins.includes(data)) await ipfs.pin.add('/ipfs/' + data);

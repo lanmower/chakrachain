@@ -4,8 +4,7 @@ const { BigNumber } = require("bignumber.js");
 const ROOT_TOKEN = 'C';
 const keys = require('./keys.js')
 const crypto = require('./crypto.js');
-
-const transact = (msg, transactionBuffer, ipfs, action, payload, response, call) => {
+const transact = (msg, transactionBuffer, ipfs, action, payload, response, callback) => {
     const transaction = crypto.sign({
         contract: keys.publicKey,
         action: action.names[0],
@@ -34,7 +33,7 @@ const transact = (msg, transactionBuffer, ipfs, action, payload, response, call)
                         .setFooter(`Chakrachain (SIM:${simtime}/FINAL:${finaltime})`);
                     const rep = msg.channel.send(reply);
                     setTimeout(()=>{rep.delete()}, 5000)
-                    if(call) call(rep)
+                    if(callback) callback(rep)
                 }
             }
         });
@@ -112,7 +111,7 @@ const faucet = async (msg, ipfs, action, payload, transactionBuffer) => {
                         const input = parseFloat(payload[0]);
                         const quantity = new BigNumber(input / userCount).toFixed(8)
                         await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, transactionBuffer, ipfs, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` ${payload[1]} to <@!${user}>`, (resp)=>{
-                            setTimeout(()=>{rep.delete()}, 1000)
+                            setTimeout(()=>{try {rep.delete()} catch(e) {}}, 1000)
                         });
                     }
                 }
@@ -152,7 +151,8 @@ const balances = async (msg, ipfs, action, payload, transactionBuffer) => {
             const token = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/tokens/${file.name}`);
             if (loaded) exampleEmbed.addFields({ name: file.name, value: (token.invite ? `\n[Join Discord](https://discord.gg/${token.invite})\n` : '') + loaded.balance, inline: true });
         }
-        msg.channel.send(exampleEmbed);
+        const sent = msg.channel.send(exampleEmbed);
+        setTimeout(()=>{sent.delete()}, 30000)
     } catch (e) {
         msg.channel.send("You dont have any balances yet.")
     }

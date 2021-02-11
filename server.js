@@ -162,5 +162,14 @@ const ready = async ipfs => {
 IPFS.create({
   EXPERIMENTAL: {
     pubsub: true // required, enables pubsub
+  },
+  libp2p: {
+    config: {
+      dht: {
+        enabled: true,
+        clientMode: false
+      }
+    }
   }
+  
 }).then(run);

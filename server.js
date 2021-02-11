@@ -60,14 +60,17 @@ const ready = async ipfs => {
   let running = false;
   const code = fs.readFileSync('./tokens.js').toString();
   const read = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/current`);
-  const transaction = crypto.sign({
-    contract: keys.publicKey,
-    action: 'setContract',
-    sender: '',
-    payload: code
-  }, keys.secretKey);
-  if (!read || read.code != code) {
-    transactionBuffer.push({ transaction, account: keys.publicKey, publicKey: keys.publicKey });
+
+  if (keys.secretKey) {
+    const transaction = crypto.sign({
+      contract: keys.publicKey,
+      action: 'setContract',
+      sender: '',
+      payload: code
+    }, keys.secretKey);
+    if (!read || read.code != code) {
+      transactionBuffer.push({ transaction, account: keys.publicKey, publicKey: keys.publicKey });
+    }
   }
 
   setInterval(async () => {
@@ -114,7 +117,7 @@ const ready = async ipfs => {
   setTimeout(async () => {
     try {
       while (data) {
-        
+
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
         if (data) await ipfs.pin.add('/ipfs/' + data);
       }
@@ -144,11 +147,11 @@ IPFS.create({
   EXPERIMENTAL: {
     pubsub: true // required, enables pubsub
   },
-config: {
+  config: {
     Addresses: {
       Swarm: [
         "/ip4/0.0.0.0/tcp/5001"
       ]
     }
   }
-  }).then(run);
+}).then(run);

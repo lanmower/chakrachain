@@ -95,6 +95,7 @@ const ready = async ipfs => {
         await ipfs.pin.add('/ipfs/' + message.newcid);
         console.log('pinned');
         if (!keys.secretKey) {
+          await ipfs.files.rm('/data',{recursive:true})
           await ipfs.files.cp('/ipfs/' + message.newcid, '/data')
           console.log('added to data');
           const newcid = (await ipfs.files.stat("/data")).cid;

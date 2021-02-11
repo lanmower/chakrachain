@@ -116,7 +116,7 @@ const ready = async ipfs => {
       if (data.height == 3) return null;
       return data.parentcid;
     } catch (e) {
-
+      console.log(e.message);
     }
   }
   let data = '/data/block';

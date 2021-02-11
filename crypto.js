@@ -38,7 +38,7 @@ exports.read = async (ipfs, p) => {
     if(!r) return null;
     const { data, account } = r;
     if(!data || !account) return null;
-    return lverify(data, keys.publicKey)
+    return lverify(data, account)
   } catch(e) {
     console.log('READ ERROR');
     console.error(e);

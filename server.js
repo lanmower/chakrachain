@@ -115,6 +115,7 @@ const ready = async ipfs => {
   const getParent = async (p) => {
     try {
       const data = await crypto.read(ipfs, p);
+      console.log(data);
       if (data.height == 3) return null;
       return data.parentcid;
     } catch (e) {
@@ -132,7 +133,6 @@ const ready = async ipfs => {
       console.error(e);
     }
   }, 0)
-  console.log('pinned all the way back');
   if (client) client.on("message", async msg => {
     if (msg.content.startsWith("#") || msg.content.startsWith("token ") || msg.content.startsWith("chakra ")) {
       const payload = msg.content.replace("token ", "").replace("#", "").toLowerCase().split(" ").filter(param => (param.trim().length));

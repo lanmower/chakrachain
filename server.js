@@ -153,12 +153,5 @@ const ready = async ipfs => {
 IPFS.create({
   EXPERIMENTAL: {
     pubsub: true // required, enables pubsub
-  },
-  config: {
-    Addresses: {
-      Swarm: [
-        "/ip4/0.0.0.0/tcp/5001"
-      ]
-    }
   }
 }).then(run);

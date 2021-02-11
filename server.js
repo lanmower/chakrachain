@@ -88,13 +88,13 @@ const ready = async ipfs => {
     try {
       const message = packr.unpack(msg.data);
       console.log(message)
-      if(message.newcid) ipfs.pin.add('/ipfs/' + message.newcid);
+      if (message.newcid) ipfs.pin.add('/ipfs/' + message.newcid);
       if (!keys.secretKey) ipfs.files.cp('/ipfs/' + message.newcid, '/data')
     } catch (e) {
       console.error(e);
     }
   })
-  setInterval(async()=>{
+  setInterval(async () => {
     const peerIds = await ipfs.pubsub.peers(topic)
     console.log(peerIds)
   }, 10000)
@@ -104,7 +104,7 @@ const ready = async ipfs => {
     try {
       const data = await crypto.read(ipfs, p);
       console.log(data.height);
-      if (data.height==3) return null;
+      if (data.height == 3) return null;
       return data.parentcid;
     } catch (e) {
 
@@ -116,7 +116,7 @@ const ready = async ipfs => {
       while (data) {
 
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
-        if(data) await ipfs.pin.add('/ipfs/' + data);
+        if (data) await ipfs.pin.add('/ipfs/' + data);
       }
     } catch (e) {
       console.error(e);
@@ -141,7 +141,14 @@ const ready = async ipfs => {
 };
 
 IPFS.create({
-  EXPERIMENTAL: {
-    pubsub: true // required, enables pubsub
+  config: {
+    EXPERIMENTAL: {
+      pubsub: true // required, enables pubsub
+    },
+    Addresses: {
+      Swarm: [
+        //'/dns4/ws-star.discovery.libp2p.io/tcp/443/wss/p2p-websocket-star'
+      ]
+    }
   }
-}).then(run);
+  }).then(run);

@@ -114,7 +114,7 @@ const ready = async ipfs => {
   setTimeout(async () => {
     try {
       while (data) {
-
+        
         data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
         if (data) await ipfs.pin.add('/ipfs/' + data);
       }

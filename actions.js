@@ -5,7 +5,7 @@ const ROOT_TOKEN = 'C';
 const keys = require('./keys.js')
 const crypto = require('./crypto.js');
 
-const transact = (msg, transactionBuffer, ipfs, action, payload, response) => {
+const transact = (msg, transactionBuffer, ipfs, action, payload, response, call) => {
     const transaction = crypto.sign({
         contract: keys.publicKey,
         action: action.names[0],
@@ -32,7 +32,9 @@ const transact = (msg, transactionBuffer, ipfs, action, payload, response) => {
                         .setAuthor('Chakrachain', 'https://i.imgflip.com/r1u53.jpg', 'https://discord.js.org')
                         .setDescription(response)
                         .setFooter(`Chakrachain (SIM:${simtime}/FINAL:${finaltime})`);
-                    msg.channel.send(reply);
+                    const rep = msg.channel.send(reply);
+                    setTimeout(()=>{rep.delete()}, 5000)
+                    if(call) call(rep)
                 }
             }
         });
@@ -109,7 +111,9 @@ const faucet = async (msg, ipfs, action, payload, transactionBuffer) => {
                         const userCount = users.length - 1;
                         const input = parseFloat(payload[0]);
                         const quantity = new BigNumber(input / userCount).toFixed(8)
-                        await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, transactionBuffer, ipfs, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` ${payload[1]} to <@!${user}>`);
+                        await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, transactionBuffer, ipfs, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` ${payload[1]} to <@!${user}>`, (resp)=>{
+                            setTimeout(()=>{rep.delete()}, 1000)
+                        });
                     }
                 }
                 if (users.length > 1) resolve(true);

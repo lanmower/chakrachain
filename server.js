@@ -85,9 +85,9 @@ const ready = async ipfs => {
   }, 50);
 
   await ipfs.pubsub.subscribe(topic, async (msg) => {
-    console.log(message.newcid);
     try {
       const message = packr.unpack(msg.data);
+    console.log(message.newcid);
       if(message.newcid) ipfs.pin.add('/ipfs/' + message.newcid);
       if (!keys.secretKey) ipfs.files.cp('/ipfs/' + message.newcid, '/data')
     } catch (e) {

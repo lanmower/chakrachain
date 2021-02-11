@@ -56,6 +56,14 @@ const run = async ipfs => {
 
 
 const ready = async ipfs => {
+  try {
+    //const parentcid = await crypto.read(ipfs, '/data/block').parentcid;
+    //await ipfs.files.cp(parentcid, '/data');
+  } catch (e) {
+      await ipfs.files.mkdir("/data", { parents: true });
+  }
+  await ipfs.pin.rmAll()
+
   const transactionBuffer = [];
   let running = false;
 

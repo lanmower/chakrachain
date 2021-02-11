@@ -128,7 +128,6 @@ try {
 setTimeout(async () => {
     const pins = [];
     for await (const { cid, type } of ipfs.pin.ls()) {
-      console.log({ cid, type })
       pins.push(cid.toString());
     }
       try {

@@ -94,6 +94,10 @@ const ready = async ipfs => {
       console.error(e);
     }
   })
+  setInterval(async()=>{
+    const peerIds = await ipfs.pubsub.peers(topic)
+    console.log(peerIds)
+  }, 10000)
 
   console.log(`subscribed to ${topic}`)
   const getParent = async (p) => {
@@ -136,4 +140,8 @@ const ready = async ipfs => {
   });
 };
 
-IPFS.create().then(run);
+IPFS.create({
+  EXPERIMENTAL: {
+    pubsub: true // required, enables pubsub
+  }
+}).then(run);

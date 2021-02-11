@@ -94,7 +94,7 @@ const faucet = async (msg, ipfs, action, payload, transactionBuffer) => {
     }
     payload[1] = payload[1].toUpperCase();
     const filter = reaction => reaction.emoji.name === '🍆';
-    const rep = await msg.channel.send('Click on the emoji!')
+    const rep = await msg.channel.send(payload[0]+' '+payload[1] + ' available, click on the emoji!')
     await rep.react('🍆');
     const collected = await rep.awaitReactions(filter, { time: 10000, max: 10 });
     const ret = await new Promise(async resolve => {
@@ -109,7 +109,7 @@ const faucet = async (msg, ipfs, action, payload, transactionBuffer) => {
                         const userCount = users.length - 1;
                         const input = parseFloat(payload[0]);
                         const quantity = new BigNumber(input / userCount).toFixed(8)
-                        await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, transactionBuffer, ipfs, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` to <@!${user}>`);
+                        await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, transactionBuffer, ipfs, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` ${payload[1]} to <@!${user}>`);
                     }
                 }
                 if (users.length > 1) resolve(true);
@@ -304,7 +304,7 @@ const swap = async (msg, ipfs, action, payload, transactionBuffer) => {
     response = `Swapped ${payload[0]} ${symbol1} for ${calculateBalance(0, quantity * ratio, 8, true)} ${symbol2}`;
     transact(msg, transactionBuffer, ipfs, action, payload, response);
 }
-
+let faucets=0;
 exports.actions = [
     {
         names: ['create'],
@@ -341,8 +341,31 @@ exports.actions = [
     {
         names: ['autofaucet'],
         call: (msg, ipfs, action, payload, transactionBuffer) => {
-            let times = payload[2];
-            const int = setInterval(async () => { if (times < 1) clearInterval(int); if (await faucet(msg, ipfs, action, payload, transactionBuffer)) times--; }, 20000);
+            let times = parseInt(payload[2]);
+            if(times > 10) times = 10;
+            ++faucets;
+            const run = async () => { 
+                try {
+                if (times < 1) {
+                    --faucets;
+                    clearInterval(int);
+                }
+                
+                const path = `/data/contracts/${keys.publicKey}/balances/${payload[1].toUpperCase()}/${msg.author.id}`;
+                const loaded = await crypto.read(ipfs, path);
+                if(loaded.balance < parseFloat(payload[1])) {
+                    --faucets;
+                    clearInterval(int);
+                }
+                if (await faucet(msg, ipfs, action, payload, transactionBuffer)) times--;
+                } catch(e) {
+                    console.log(e);
+                    --faucets;
+                    clearInterval(int);
+                }
+            }
+            const int = setInterval(run, 20000);
+            run();
         }
     },
     {

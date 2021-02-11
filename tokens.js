@@ -237,7 +237,7 @@
         [typeof quantity === "string", "quantity must be a string"],
         [typeof rootquantity === "string", ROOT_TOKEN + " quantity must be a string"],
         [!api.BigNumber(quantity).isNaN(), "quantity must be a number"],
-        [!api.BigNumber(rootquantity).isNaN(), ROOT_TOKEN + " quantity must be a number"]
+        [!api.BigNumber(rootquantity).isNaN(), "the " + ROOT_TOKEN + " quantity must be a number"]
       ]);
       quantity = parseFloat(quantity);
       rootquantity = parseFloat(rootquantity);

@@ -147,7 +147,7 @@ IPFS.create({
 config: {
     Addresses: {
       Swarm: [
-        "/ip4/0.0.0.0/tcp/4001"
+        "/ip4/0.0.0.0/tcp/5001"
       ]
     }
   }

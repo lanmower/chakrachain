@@ -1,18 +1,11 @@
 const { sign } = require('tweetnacl');
 exports.generateKeyPair = () => sign.keyPair()
 const keys = require('./keys.js')
-const { read, write } = require('./io.js');
+const { read, write,ls,oldRead, oldWrite, close, clear } = require('./io.js');
 const util = require('tweetnacl-util');
 exports.util = util;
-const {
-  decodeUTF8,
-  encodeUTF8,
-  encodeBase64,
-  decodeBase64
-} = require("tweetnacl-util");
 const { Packr } = require('msgpackr');
 let packr = new Packr({ structuredClone: true });
-
 const lsign = exports.sign = (obj, key) => {
   const keyUint8Array =  new Uint8Array(Buffer.from(key, 'hex'));
   const packed = packr.pack(obj);
@@ -20,6 +13,10 @@ const lsign = exports.sign = (obj, key) => {
   const box =  sign(messageUint8, keyUint8Array);
   return box;
 };
+
+exports.clear = (p)=>{
+  return clear(p);
+}
 
 const lverify = exports.verify = (msg, key) => {
   if(msg == null) throw new Error('Cannot verify null message');
@@ -32,9 +29,33 @@ const lverify = exports.verify = (msg, key) => {
 };
 
 
-exports.read = async (ipfs, p) => {
+exports.read = (p) => {
   try { 
-    const r = await read(ipfs, p);
+    const r = read(p);
+    return r;
+    if(!r) return null;
+    const { data, account } = r;
+    if(!data || !account) return null;
+    return lverify(data, account)
+  } catch(e) {
+    console.log('READ ERROR',e.message);
+    return null;
+  }
+};
+
+exports.write = (p, input, options, keypair=keys) => {
+//  console.log('writing', p)
+  //const data = lsign(input, keypair.secretKey)
+  return write(p, input);
+};
+
+exports.ls = (p) =>{
+  return ls(p);
+}
+
+exports.oldRead = async (ipfs, p) => {
+  try { 
+    const r = await oldRead(ipfs.files, p);
     if(!r) return null;
     const { data, account } = r;
     if(!data || !account) return null;
@@ -47,8 +68,13 @@ exports.read = async (ipfs, p) => {
   }
 };
 
-exports.write = async (ipfs, p, input, options, keypair=keys) => {
+exports.oldWrite = async (ipfs, p, input, options, keypair=keys) => {
   const data = await lsign(input, keypair.secretKey)
-  return await write(ipfs, p, { data, account:keypair.publicKey}, options);
+  return await oldWrite(ipfs.files, p, { data, account:keypair.publicKey}, options);
 };
+
+exports.close = ()=>{
+  console.log('crypto close')
+  close();
+}
 

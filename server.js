@@ -3,19 +3,19 @@ const express = require("express");
 const fs = require("fs");
 const app = express();
 const all = require("it-all");
-const IPFS = require("ipfs-core");
+const IPFS = require("ipfs-http-client");
 const Discord = require("discord.js");
+const { Packr } = require('msgpackr');
+let packr = new Packr({ structuredClone: true });
 let client;
 if (process.env.DISCORD) client = new Discord.Client();
 const { actions } = require("./actions.js");
 const { createBlock } = require('./chain.js');
 const crypto = require('./crypto.js');
 const keys = require('./keys.js');
-const { Packr } = require('msgpackr');
 const topic = 'REPLACE_WITH_GENESIS';
 require('events').setMaxListeners(4096);
 require('events').EventEmitter.prototype._maxListeners = 4096;
-let packr = new Packr({ structuredClone: true });
 if (client) client.on("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
 });
@@ -38,12 +38,7 @@ const run = async ipfs => {
   //await ipfs.add(fs.readFileSync("./explorer.html"))
   //const explorer = (await ipfs.add(fs.readFileSync("./explorer.html"))).cid;
   //try {await ipfs.files.rm('/data/explorer.html');} catch (e) {}
-  //await ipfs.files.cp('/ipfs/' + explorer.toString(), '/data/explorer.html', { parents: true });
-
-  app.use("/delete", (req, res) => {
-    ipfs.files.rm("/data", { recursive: true });
-    res.send('done');
-  });
+  //await ipfs.files.cp('/data/' + explorer.toString(), '/data/explorer.html', { parents: true });
   app.use("request", async function (req, res) {
     try {
       let src = await all(req.query.cid);
@@ -54,22 +49,51 @@ const run = async ipfs => {
   });
 };
 
-
 const ready = async ipfs => {
-  try {
-    //const parentcid = await crypto.read(ipfs, '/data/block').parentcid;
-    //await ipfs.files.cp(parentcid, '/data');
-  } catch (e) {
-      await ipfs.files.mkdir("/data", { parents: true });
+  ipfs.pubsub.subscribe('chakrachain-blocks', console.log);
+  await ipfs.pubsub.subscribe('chakrachain-transactions', (msg)=>{
+    try {
+      const data = packr.unpack(msg.data);
+      const transaction = new Uint8Array(Buffer.from(data.data, 'hex'));
+      const publicKey = data.publicKey;
+      
+      console.log(crypto.verify(new Uint8Array(Buffer.from(data.data, 'hex')), data.publicKey));
+      transactionBuffer.push({
+        transaction, publicKey,
+        callback: async (error, data, { simtime, finaltime }, block, newcid) => {
+          console.log({error, data, simtime, finaltime, block, newcid})
+        }
+      });
+    } catch(e) {
+      console.error(e);
+    }
+  });
+  setInterval(async()=>{console.log(await ipfs.pubsub.peers('chakrachain-blocks'))}, 10000)
+  /*const newcid = (await ipfs.files.stat("/data")).cid;
+  let head = '/ipfs/' + newcid;
+  if (head) {
+    const block = await crypto.oldRead(ipfs, head + "/block");
+    for await (const file of await ipfs.get(head)) {
+      if (file.type == 'file') {
+        const data = await crypto.oldRead(ipfs, '/ipfs/' + file.cid)
+        console.log({ file: file.path.replace(head.replace('/ipfs/', '') + "/", 'data/'), data });
+
+        crypto.write(file.path.replace(head.replace('/ipfs/', '') + "/", 'data/'), data)
+      }
+    }
+    console.log(block.parentcid)
+    //head = '/ipfs/' + block.parentcid
   }
-  await ipfs.pin.rmAll()
+  process.exit(0);*/
+
+  //await ipfs.pin.rmAll()
 
   const transactionBuffer = [];
   let running = false;
 
   if (keys.secretKey) {
     const code = fs.readFileSync('./tokens.js').toString();
-    const read = await crypto.read(ipfs, `/data/contracts/${keys.publicKey}/current`);
+    const read = await crypto.read(`/data/contracts/${keys.publicKey}/current`);
     const transaction = crypto.sign({
       contract: keys.publicKey,
       action: 'setContract',
@@ -87,69 +111,15 @@ const ready = async ipfs => {
     if (transactionBuffer.length) {
       try {
         console.log('creating block');
-        const cid = await createBlock(ipfs, transactionBuffer);
+        await createBlock(ipfs, transactionBuffer);
       } catch (e) {
         console.error("error creating block", e);
       }
     }
     running = false;
-  }, 50);
+  }, 250);
 
-  await ipfs.pubsub.subscribe(topic, async (msg) => {
-    try {
-      const message = packr.unpack(msg.data);
-      console.log(message, message.newcid)
-      if (message.newcid) {
-        await ipfs.pin.add('/ipfs/' + message.newcid);
-        console.log('pinned', (!keys.secretKey));
-        if (!keys.secretKey) {
-          await ipfs.files.cp('/ipfs/' + message.newcid, '/data')
-          console.log('added to data');
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  })
-  setInterval(async () => {
-    const peerIds = await ipfs.pubsub.peers(topic)
-    console.log(peerIds)
-  }, 60000)
-  try {
-    const newcid = (await ipfs.files.stat("/data")).cid;
-    console.log('data is', newcid.toString());
-  } catch (e) {
-
-  }
-  console.log(`subscribed to ${topic}`)
-  const getParent = async (p) => {
-    try {
-      const data = await crypto.read(ipfs, p);
-      console.log(data.height);
-      if (data.height == 3) return null;
-      return data.parentcid;
-    } catch (e) {
-      console.log(e.message);
-    }
-  }
-  let data = '/data/block';
-  setTimeout(async () => {
-    let pins = [];
-    console.log('pinning block history');
-    try {
-      while (data) {
-        data = await getParent(data != '/data/block' ? '/ipfs/' + data + '/block' : '/data/block');
-        pins.push('/ipfs/' + data);
-        if(pins.length > 100) {
-          await ipfs.pin.addAll(pins)
-          pins = [];
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    ipfs.pin.addAll(pins)
-  }, 0)
+  console.log('Waiting for messages')
   if (client) client.on("message", async msg => {
     if (msg.content.startsWith("#") || msg.content.startsWith("token ") || msg.content.startsWith("chakra ")) {
       const payload = msg.content.replace("token ", "").replace("#", "").toLowerCase().split(" ").filter(param => (param.trim().length));
@@ -157,7 +127,7 @@ const ready = async ipfs => {
       for (action of actions) {
         if (action.names.includes(name)) {
           try {
-            await action.call(msg, ipfs, action, payload, transactionBuffer);
+            await action.call(msg, action, payload, transactionBuffer);
           } catch (e) {
             console.error(e);
           }
@@ -166,18 +136,8 @@ const ready = async ipfs => {
     }
   });
 };
-
-IPFS.create({
+run (new IPFS({
   EXPERIMENTAL: {
     pubsub: true // required, enables pubsub
-  },
-  libp2p: {
-    config: {
-      dht: {
-        enabled: true,
-        clientMode: false
-      }
-    }
   }
-  
-}).then(run);
+}));

@@ -3,18 +3,21 @@ const { VM, VMScript } = require("vm2");
 const validator = require("validator");
 const crypto = require('./crypto.js');
 const keys = require('./keys.js')
+const fse = require('fs-extra');
 const fs = require('fs');
+const path = require('path');
 const topic = 'REPLACE_WITH_GENESIS';
 const { Packr } = require('msgpackr');
+
 let packr = new Packr({ structuredClone: true });
 
 const cache = {
 }
 
-setCache = async (ipfs, p, name, before = d => d) => {
+setCache = async (p, name, before = d => d) => {
     cache[name] = cache[name] || {};
     const update = async () => {
-        let src = await crypto.read(ipfs, p);
+        let src = await crypto.read(p);
         return {
             time: new Date().getTime(),
             value: before(src)
@@ -28,31 +31,34 @@ getCache = (name, p) => {
     return cache[name][p].value;
 }
 
-processTransaction = async (ipfs, input, simulation) => {
-    const root = "data";
-    const transaction = crypto.verify(input.transaction, input.publicKey);
-    const {contract,sender,action} = transaction;
-    if(action == 'setContract') {
+processTransaction = async (input, simulation) => {
+    const t = crypto.verify(input.transaction, input.publicKey);
+    let transaction = t instanceof Map?transcation = Object.fromEntries(t):t;
+
+
+    if(!transaction) throw new Error('Transaction from '+input.publicKey+' not verified');
+    const { contract, sender, action } = transaction;
+    if (action == 'setContract') {
         const time = new Date().getTime();
-        const output = await crypto.write(ipfs, `/data/contracts/${contract}/current`, {code: transaction.payload});
-        return { error:null, result:output, time: new Date().getTime() - time }
+        const output = await crypto.write(`/data/contracts/${input.publicKey}/current`, { code: transaction.payload });
+        return { error: null, result: output, time: new Date().getTime() - time }
     }
     const parseSrc = (src) => {
         let codetext = `
-        RegExp.prototype.constructor = function () { };RegExp.prototype.exec = function () {  };RegExp.prototype.test = function () {  };const construct = ${src.code};
+        RegExp.prototype.constructor = function () { };RegExp.prototype.exec = function () {  };RegExp.prototype.test = function () {  }; const construct = ${src.code};
         let actions = construct();  
         if(!(api.action && typeof api.action === 'string' && typeof actions[api.action] === 'function')) throw new Error('invalid action:'+api.action);
-        actions[api.action](api.transaction.payload).then((out)=>{done(null, out)}).catch((e)=>{done(e); console.error(e)})
+        try {
+            done(null, actions[api.action](api.transaction.payload));
+        } catch(e) {
+            done(e, null);
+            console.error(e);
+        }
         `;
         return new VMScript(codetext)
     }
-    await setCache(ipfs, `/data/contracts/${contract}/current`, 'code', parseSrc);
+    await setCache(`/data/contracts/${contract}/current`, 'code', parseSrc);
     let api = {
-        mkdir: async path => {
-            api.writes++;
-            if (!api.simluation) return await ipfs.files.mkdir(`/data/contracts/${contract}/${path}`);
-            else return null;
-        },
         assert: (crit, msg) => {
             if (Array.isArray(crit)) {
                 for (let c of crit) {
@@ -61,28 +67,34 @@ processTransaction = async (ipfs, input, simulation) => {
             }
             if (!crit) throw new Error(msg);
         },
-        read: async (p) => {
+        read: (p) => {
             api.reads++;
-            if(api.simulation && api.simwrites && api.simwrites[p]) {
+            if (api.simulation && api.simwrites && api.simwrites[p]) {
                 return api.simwrites[p];
             }
-            const output = await crypto.read(ipfs, `/data/contracts/${contract}/${p}`);
+            const output = crypto.read(`/data/contracts/${contract}/${p}`);
             return output;
         },
-        write: async (p, input) => {
+        clear: async (p) => {
+            const output = await crypto.clear(`/data/contracts/${contract}/${p}`);
+            return output;
+        },
+        write: (p, input) => {
             if (api.simulation) {
-                if(!api.simwrites) api.simwrites = {};
+                if (!api.simwrites) api.simwrites = {};
                 api.simwrites[p] = input;
                 return null;
             }
             api.writes++;
-            return output = await crypto.write(ipfs, `/data/contracts/${contract}/${p}`, input);
+            return output = crypto.write(`/data/contracts/${contract}/${p}`, input);
         },
         writes: 0,
         reads: 0,
         simulation,
-        simwrites:{},
+        simwrites: {},
         sender,
+        publicKey:input.publicKey,
+        contract:contract,
         BigNumber,
         validator,
         action,
@@ -90,7 +102,8 @@ processTransaction = async (ipfs, input, simulation) => {
         emit: () => { }
     };
     const vm = new VM({
-        timeout: 1000
+        timeout: 1000,
+        fixAsync: true
     });
     const time = new Date().getTime();
     return await new Promise(async (resolve) => {
@@ -100,110 +113,98 @@ processTransaction = async (ipfs, input, simulation) => {
         vm._context.api = api;
         vm._context.console = console;
         try {
-            console.log('running: ', `/data/contracts/${contract}/current`)
             vm.run(getCache('code', `/data/contracts/${contract}/current`));
-        } catch(e) {
+        } catch (e) {
             console.error(e);
+            resolve({ e, result, time: new Date().getTime() - time });
         }
     })
 };
-const code = fs.readFileSync('./tokens.js');
+
 exports.createBlock = async (ipfs, transactionBuffer) => {
-    
-    let parentcid
+    //fse.copySync('/data', './block');
+    let parentcid = null;
+    const file = fs.readFileSync('data/state.db');
+    parentcid = (await ipfs.add(file), { pin: true }).cid;
     try {
-        parentcid = (await ipfs.files.stat("/data")).cid;
-        await ipfs.pin.add('/ipfs/' + parentcid);
-    } catch (e) {
-        await ipfs.files.mkdir("/data", { parents: true });
-    }
-    try {
-        data = await crypto.read(ipfs, "/data/block");
+        let data = await crypto.read("/data/block/info/metadata");
         if (!data) {
             data = { height: 1 };
-            await crypto.write(ipfs, "/data/accounts/" + keys.publicKey, {}, {
+            await crypto.write("/data/accounts/" + keys.publicKey, {}, {
                 create: true,
                 parents: true
             });
         }
         const transactions = [];
+
         while (transactionBuffer.length) {
-            const transaction = transactionBuffer.shift();
+            const data = transactionBuffer.shift();
+
             let result, error;
-            const output = await processTransaction(ipfs, transaction, true);
+            const output = await processTransaction(data, true);
             let simtime = output.time;
             if (!output.error) {
                 try {
-                    const output = await processTransaction(ipfs, transaction, false);
+                    const output = await processTransaction(data, false);
                     result = output.result;
                     error = output.error;
                     finaltime = output.time;
-                    transactions.push({ transaction, simtime, finaltime, result, error });
+                    transactions.push({ payload:data, simtime, finaltime, result, error });
                 } catch (e) {
                     console.error(e);
                 }
             } else {
                 result = output.result;
                 error = output.error;
-                finaltime = output.ltime;
-
-                transactions.push({ transaction, simtime, finaltime: 0, result, error });
+                finaltime = output.finaltime;
+                transactions.push({ payload:data, simtime, finaltime: 0, result, error });
             }
         }
         data.height++;
-        if(parentcid) data.parentcid = parentcid.toString();
+        if (parentcid) data.parentcid = parentcid.toString();
         const callbacks = [];
         for (let transaction of transactions) {
-            if(transaction.transaction.callback) {
-                const callback = transaction.transaction.callback;
-                callbacks.push((cid)=>{callback(transaction.error, transaction.result, { simtime: transaction.simtime, finaltime: transaction.finaltime }, data, cid)});
-                delete transaction.transaction.callback;
+            if (transaction.payload.callback) {
+                const callback = transaction.payload.callback;
+                callbacks.push((cid) => { callback(transaction.error, transaction.result, { simtime: transaction.simtime, finaltime: transaction.finaltime }, data, cid) });
+                delete transaction.payload.callback;
             }
         }
 
-        const calls = async (newcid)=>{
-                for (let callback of callbacks) {
-                    try {
-                        await callback(newcid);
-                    } catch (e) { console.error(e) }
-                }
-        }   
+        const calls = async (newcid) => {
+            for (let callback of callbacks) {
+                try {
+                    await callback(newcid);
+                } catch (e) { console.error(e) }
+            }
+        }
         return new Promise(async resolve => {
             if (transactions.filter(t => !t.error).length) {
-                await crypto.write(ipfs, "/data/transactions", transactions, {
+                await crypto.write("/data/block/info/transactions", transactions, {
                     create: true,
                     parents: true
                 });
-                await crypto.write(ipfs, "/data/block", data, {
+                await crypto.write("/data/block/info/metadata", data, {
                     create: true,
                     parents: true
                 }, keys);
-                const newcid = (await ipfs.files.stat("/data")).cid;
-                if (newcid) await ipfs.pin.add('/ipfs/' + newcid);
+                let parentcid = null;
+                const file = fs.readFileSync('data/state.db');
+                parentcid = (await ipfs.add(file, { pin: true })).cid;
+                ipfs.pubsub.publish('chakrachain-blocks', packr.pack({cid:parentcid.toString(), height:data.height}));
+                calls(parentcid);
                 
-                await ipfs.pubsub.publish(topic, packr.pack({newcid:newcid.toString(), data}))
-                calls(newcid);
-                resolve({ transactions, newcid });
+                resolve(`Block ${data.height} creation complete.`);
             }
             else {
-                if (parentcid) {
-                    await ipfs.files.rm("/data", { recursive: true });
-                    await ipfs.files.cp("/ipfs/" + parentcid.toString(), "/data", {
-                        create: true
-                    });
-                }
+                //fse.copySync('./block', '/data');
                 calls(parentcid);
                 resolve({ parentcid });
             }
         });
 
     } catch (e) {
-        if (parentcid) {
-            await ipfs.files.rm("/data", { recursive: true });
-            await ipfs.files.cp("/ipfs/" + parentcid.toString(), "/data", {
-                create: true
-            });
-        }
+        //fse.copySync('./block', '/data');
         console.error(e);
         console.log('BAILED OUT, REVERSED BLOCK!!!')
         transactionBuffer.shift();

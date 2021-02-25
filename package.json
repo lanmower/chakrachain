@@ -10,6 +10,7 @@
     "start": "node src/server.js"
   },
   "dependencies": {
+    "@hyperswarm/replicator": "^2.0.0",
     "assert": "^2.0.0",
     "better-sqlite3": "^7.1.2",
     "bignumber.js": "^9.0.1",
@@ -22,6 +23,7 @@
     "hyperdrive": "^10.20.0",
     "hyperswarm": "^2.15.3",
     "msgpackr": "^1.2.1",
+    "pump": "^3.0.0",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
     "validator": "^13.5.2",

@@ -9,6 +9,8 @@ const { Packr } = require('msgpackr');
 let packr = new Packr();
 var log = hypercore('./blocklog', {valueEncoding: 'binary'})
 
+const pubsub = exports.pubsub = require("./hyperpubsub.js")('chakrachain');
+
 const cache = {
 }
 
@@ -33,6 +35,7 @@ processTransaction = async (input) => {
     let transaction = crypto.verify(input.transaction, input.publicKey);
 
     if(!transaction) throw new Error('Transaction from '+input.publicKey+' not verified');
+    if(transaction instanceof Map) transaction = Object.fromEntries(transaction);
     const { contract, sender, action } = transaction;
     const parseSrc = (src) => {
         let codetext = `
@@ -124,7 +127,8 @@ const logGet = (i)=>{
         console.log(i);
         log.get(i, {timeout:100},(l, d)=>{
             console.log(l)
-            resolve(d)
+            if(d) resolve(packr.unpack(d))
+            else resolve(null);
         })
     })
 }
@@ -132,9 +136,10 @@ const logGet = (i)=>{
 exports.createBlock = async (ipfs, transactionBuffer) => {
     try {
         let block = await logGet(log.length-1).catch(()=>{})||{};
+        console.log(block)
         const transactions = {};
         if(!block.tx) block.tx=1;
-        if(!block.h) block.h=1;
+        if(!block.h) block.h=log.length;
 
         while (transactionBuffer.length) {
             const tx = transactionBuffer.shift();
@@ -152,28 +157,7 @@ exports.createBlock = async (ipfs, transactionBuffer) => {
             error = output.error;
             finaltime = output.time;
             transactions[block.tx++]={ tx, simtime, finaltime, result, error };
-
-            //return await hyperdrivestorage.write(`contracts-${contract}-${p}`, input);
-            //const read = await hyperdrivestorage.read(`contracts-${contract}-${p}`);
-
-            /*if (!output.error) {
-                try {
-                    const output = await processTransaction(tx, false);
-                    result = output.result;
-                    error = output.error;
-                    finaltime = output.time;
-                    transactions[block.tx++]={ tx, simtime, finaltime, result, error };
-                } catch (e) {
-                    console.error(e);
-                }
-            } else {
-                result = output.result;
-                error = output.error;
-                finaltime = output.finaltime;
-                transactions[block.tx++]={ tx, simtime, finaltime: 0, result, error };
-            }*/
         }
-        block.height++;
         const callbacks = [];
         for (let key in transactions) {
             const transaction = transactions[key];
@@ -196,6 +180,7 @@ exports.createBlock = async (ipfs, transactionBuffer) => {
             const txcount = Object.keys(transactions).filter((key)=>{return !transactions[key].error}).length;
             if (txcount) {
                 await log.append(packr.pack(block));
+                pubsub.emit('block', block);
                 calls();
                 resolve(`Block ${block.h} creation complete.`);
             }

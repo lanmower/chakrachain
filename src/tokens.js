@@ -128,9 +128,6 @@
     invite: async payload => {
       payload[0] = payload[0].toUpperCase();
       const [symbol, invite] = payload;
-      api.assert([
-        [typeof invite === "string", "invite must be a string"],
-      ]);
       const token = await api.read("tokens-" + symbol);
       if (!token) throw new Error("token doesn't exist, did you spell it right?");
       api.assert(token.issuer === api.sender, "only the owner of the token can add invites");
@@ -287,13 +284,14 @@
     transfer: async payload => {
       payload[2] = payload[2].toUpperCase();
       const [to, quantity, symbol] = payload;
+      const finalTo = to.trim();
       await api.assert([
         [symbol && typeof symbol === "string", "bad name: "+symbol],
         [quantity, "no quantity"],
         [typeof quantity === "string", "quantity must be a string"],
-        [!api.BigNumber(quantity).isNaN(), "quantity must be a number"]
+        [!api.BigNumber(quantity).isNaN(), "quantity must be a number"],
+        [finalTo.length,'the to address must be filled in: <to> <quantity> <symbol>']
       ]);
-      const finalTo = to.trim();
       const token = await api.read("tokens-" + symbol);
       if (!token || !token.precision) throw new Error("does not exist");
       api.assert([

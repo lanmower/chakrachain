@@ -8,7 +8,7 @@ let client;
 if (process.env.DISCORD) client = new Discord.Client();
 //console.log(process.env.DISCORD)
 const { actions } = require("./actions.js");
-const { createBlock } = require('./chain.js');
+const { createBlock, pubsub } = require('./chain.js');
 const crypto = require('./crypto.js');
 const hyperdrivestorage = require('./hyperdrivestorage.js');
 const keys = require('./keys.js');
@@ -21,6 +21,10 @@ app.post("/hook", (req, res) => {
   console.log(req.body);
   res.status(200).end();
 })
+
+process.on('uncaughtException', function(err) {
+  console.error(err);
+});
 
 if (client) client.login(process.env.DISCORD);
 
@@ -45,6 +49,10 @@ const run = async ipfs => {
 
 const ready = async ipfs => {
   const transactionBuffer = [];
+  pubsub.on('transaction',(t)=>{
+    console.log(t);
+    transactionBuffer.push(t);
+  });
   let running = false;
 
   if (keys.secretKey) {
@@ -61,7 +69,7 @@ const ready = async ipfs => {
       transactionBuffer.push({ transaction, account: keys.publicKey, publicKey: keys.publicKey });
     }
   }
-
+  
   setInterval(async () => {
     if (running) return;
     running = true;

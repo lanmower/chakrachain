@@ -1,5 +1,25 @@
 var Hyperdrive = require('hyperdrive')
+const crypto = require("crypto");
 var drive = new Hyperdrive('./state')
+const replicate = require('@hyperswarm/replicator')
+const hyperswarm = require("hyperswarm");
+const pump = require('pump')
+drive = new Hyperdrive("./state");
+drive.ready(() => {
+  const swarm = hyperswarm();
+  swarm.on("connection", (connection, info) => {
+    pump(
+      connection,
+      drive.replicate({ initiator: info.client }),
+      connection
+    );
+  });
+  swarm.join(drive.discoveryKey, {
+    announce: true,
+    lookup: true
+  });
+});
+
 const { Packr } = require('msgpackr');
 let packr = new Packr();
 

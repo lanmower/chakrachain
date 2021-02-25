@@ -50,11 +50,18 @@ const invite = async (msg, action, payload, transactionBuffer) => {
     let channel = msg.channel;
     try {
         const invite = await channel.createInvite({ maxAge: 0, unique: true });
+        const n = await channel.guild.name;
+        const gid = await channel.guild.id;
+        const cid = await channel.id;
+        const i = await channel.guild.iconURL();
         if (!payload.length) {
             msg.channel.send('please specify symbol (less than 10 letters, case insensitive)');
             return;
         }
-        payload.push(invite.code)
+        const symbol = payload.shift();
+        const d = payload.join(' ');
+        payload = [symbol];
+        payload.push({c:invite.code, n, d, gid, cid, i, ts:new Date().getTime()})
         transact(msg, transactionBuffer, action, payload, "Edited " + payload[0]);
     } catch (e) {
         msg.channel.send("ERROR: " + e.getmessage);
@@ -148,7 +155,8 @@ const balances = async (msg, action, payload, transactionBuffer) => {
             console.log(fi)
             const loaded = await hyperdrivestorage.read(`contracts-${keys.publicKey}-balances-${fi}-${msg.author.id}`);
             const token = await hyperdrivestorage.read(`contracts-${keys.publicKey}-tokens-${fi}`);
-            if (loaded) exampleEmbed.addFields({ name: fi, value: (token.invite ? `\n[Join Discord](https://discord.gg/${token.invite})\n` : '') + loaded.balance, inline: true });
+            console.log(token);
+            if (loaded) exampleEmbed.addFields({ name: fi, value: (typeof token.invite=='object' ? `\n[Join Discord](https://discord.gg/${token.invite.c})\n` : '') + loaded.balance, inline: true });
         }
         const sent = await msg.channel.send(exampleEmbed);
         setTimeout(()=>{sent.delete().catch(()=>{})}, 30000)
@@ -184,11 +192,12 @@ const pools = async (msg, action, payload, transactionBuffer) => {
             fields.push({ name: fi, ratio, pool, token })
         //}
     }
-    fields.sort((a, b) => { return b.pool.balance - a.pool[ROOT_TOKEN] });
+    fields.sort((a, b) => { return b.pool[ROOT_TOKEN] - a.pool[ROOT_TOKEN] });
     for (let field of fields) {
+        console.log(field);
         exampleEmbed.addFields({ 
             name: field.name, 
-            value: (field.token.invite ? `[Join Discord](https://discord.gg/${field.token.invite})\n` : '') +
+            value: (typeof field.token.invite == 'object' ? `[Join Discord](https://discord.gg/${field.token.invite.c})\n` : '') +
             `${field.name}: ${field.pool[field.name]}\n${ROOT_TOKEN}: ${BigNumber(field.pool[ROOT_TOKEN]).toFixed(4)}\nPrice: ${(field.ratio).toFixed(4)}`,
              inline: true });
     }
@@ -254,7 +263,7 @@ hand the token out to emoji clickers, after 10 seconds
 #autofaucet <amount> <name> <count>
 run autofaucet until x amount of handouts are reached
 
-#invite <name>
+#invite <name> <description>
 link your token to the current discord channel with an invite
 
 #link

@@ -98,6 +98,9 @@ const faucet = async (msg, action, payload, transactionBuffer) => {
         return;
     }
     payload[1] = payload[1].toUpperCase();
+    const path = `contracts-${keys.publicKey}-balances-${payload[1]}-${msg.author.id}`;
+    const loaded = await hyperdrivestorage.read(path);
+    if(parseFloat(payload[0]) > parseFloat(loaded.balance)) await msg.channel.reply('You need more '+symbol)
     const filter = reaction => reaction.emoji.name === '🍆';
     const rep = await msg.channel.send(payload[0]+' '+payload[1] + ' available, click on the emoji!')
     await rep.react('🍆');

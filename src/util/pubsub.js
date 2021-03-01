@@ -22,7 +22,6 @@ function server(tstring) {
     announce: true // optional- announce self as a connection target
   });
   const funcmap = {};
-  let done;
   const sockets = [];
   swarm.on("connection", (socket, info) => {
     socket.write(packr.pack({ id: localId.toString(), e: "r" }));
@@ -47,7 +46,6 @@ function server(tstring) {
   });
   swarm.listen();
 
-  console.log("connecting");
   return {
     on: (action, func) => {
       funcmap[action] = func;

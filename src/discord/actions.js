@@ -2,9 +2,9 @@ const Discord = require("discord.js");
 const { isNumeric } = require("validator");
 const { BigNumber } = require("bignumber.js");
 const ROOT_TOKEN = 'C';
-const keys = require('./keys.js')
-const crypto = require('./crypto.js');
-const hyperdrivestorage = require('./hyperdrivestorage.js');
+const keys = require('../util/keys.js')
+const crypto = require('../util/crypto.js');
+const hyperdrivestorage = require('../util/storage.js');
 
 const transact = (msg, transactionBuffer, action, payload, response, cb) => {
     const transaction = crypto.sign({

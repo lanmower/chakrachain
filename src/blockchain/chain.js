@@ -2,13 +2,15 @@ const hyperdrivestorage = require('../util/storage.js');
 var hypercore = require('hypercore')
 const { Packr } = require('msgpackr');
 let packr = new Packr();
-var log = hypercore('./blocklog', {valueEncoding: 'binary'})
-const {processTransaction} = require('./transaction.js');
+var log = hypercore('./blocklog', { valueEncoding: 'binary' })
+var txlog = hypercore('./txlog', { valueEncoding: 'binary' })
+const { processTransaction } = require('./transaction.js');
+const { TRANSACTION, ERROR, HEIGHT, CALLBACK } = require('../constants/constants.js');
 
-const logGet = (i)=>{
-    return new Promise(resolve=>{
-        log.get(i, {timeout:1000},(l, d)=>{
-            if(d) resolve(packr.unpack(d))
+const logGet = (i) => {
+    return new Promise(resolve => {
+        log.get(i, { timeout: 1000 }, (l, data) => {
+            if (data) resolve(packr.unpack(data))
             else resolve(null);
         })
     })
@@ -16,53 +18,47 @@ const logGet = (i)=>{
 
 exports.createBlock = async (transactionBuffer) => {
     try {
-        let block = await logGet(log.length-1).catch(()=>{})||{};
+        let block = await logGet(log.length - 1).catch(() => { }) || {};
         const transactions = {};
-        if(!block.tx) block.tx=1;
-        if(!block.h) block.h=log.length;
+        if (!block[TRANSACTION]) block[TRANSACTION] = 1;
+        if (!block[HEIGHT]) block[HEIGHT] = log.length;
 
         while (transactionBuffer.length) {
             const tx = transactionBuffer.shift();
-            let result, error;
-            const output = await processTransaction(tx);
-            if(output.error == null) {
-                for(write in output.writes) {
-                    await hyperdrivestorage.write(write, output.writes[write]);
-                }
-            }
-            let simtime = output.time;
-            result = output.result;
-            error = output.error;
-            finaltime = output.time;
-            transactions[++block.tx]={ tx, simtime, finaltime, result, error };
+            const result = await processTransaction(tx);
+            result[TRANSACTION]= tx;
+
+            const callback = tx[CALLBACK];
+            delete tx[TRANSACTION];
+            try {if(typeof callback=='function') callback(result); } catch (e) { console.error(e) };
+            tx[++block[TRANSACTION]] = result;
+            
         }
-        const callbacks = [];
         for (let key in transactions) {
             const transaction = transactions[key];
-            if (transaction.tx.callback) {
-                const callback = transaction.tx.callback;
-                callbacks.push(() => { callback(transaction.error, transaction.result, { simtime: transaction.simtime, finaltime: transaction.finaltime }, block) });
-                delete transaction.tx.callback;
-            }
-        }
-        block.transaction = transactions;
-        const calls = async () => {
-            for (let callback of callbacks) {
-                try {
-                    await callback();
-                } catch (e) { console.error(e) }
-            }
+            if (typeof transaction[TRANSACTION][CALLBACK] == 'function') {
+            } else throw new Error('transaction callback must be a function');
         }
         return new Promise(async resolve => {
-            const txcount = Object.keys(transactions).filter((key)=>{return !transactions[key].error}).length;
-            if (txcount) {
+            block[TRANSACTION] = Object.keys(transactions).filter((key) => { return !transactions[key][ERROR] });
+            block[ERROR] = Object.keys(transactions).filter((key) => { return transactions[key][ERROR] });
+            console.log(block);
+            for (tx of block[TRANSACTION]) {
+                for (write in tx[WRITES]) {
+                    await hyperdrivestorage.write(write, output[WRITES][write]);
+                }
+                const output = {};
+                output[HEIGHT] = h;
+                output[TRANSACTION] = tx;
+                await txlog.append(packr.pack(output));
+            }
+
+            if (transactions.length) {
                 await log.append(packr.pack(block));
-                calls();
                 resolve(block);
             }
             else {
-                calls();
-                resolve({ msg:'no tx' });
+                resolve({ msg: 'no tx' });
             }
         });
 
@@ -70,6 +66,6 @@ exports.createBlock = async (transactionBuffer) => {
         console.error(e);
         console.log('BAILED OUT, REVERSED BLOCK!!!')
         transactionBuffer.shift();
-        return {  };
+        return {};
     }
 };

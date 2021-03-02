@@ -7,6 +7,7 @@ exports.setCache = async (p, name, before = d => d) => {
     cache[name] = cache[name] || {};
     const update = async () => {
         let src = await hyperdrivestorage.read(p);
+
         return {
             time: new Date().getTime(),
             value: before(src)

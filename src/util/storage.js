@@ -53,7 +53,6 @@ const ls = (p) => {
     path = p.replaceAll('-', '/');
     return new Promise(resolve => {
         drive.readdir(path, function (err, list) {
-            console.log(list)
             if (!err) resolve(list)
             else resolve(list)
         })

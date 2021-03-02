@@ -5,35 +5,36 @@ const ROOT_TOKEN = 'C';
 const keys = require('../util/keys.js')
 const crypto = require('../util/crypto.js');
 const hyperdrivestorage = require('../util/storage.js');
+const { TRANSACTION, CALLBACK, PUBLICKEY, CONTRACT, ACTION, INPUT, SENDER, ERROR, HEIGHT } = require('../constants/constants.js');
+const transact = (msg, transactionBuffer, action, payload, response) => {
+    const input = {};
+    input[CONTRACT] = keys.publicKey;
+    input[ACTION] = action.names[0];
+    input[SENDER] = msg.author.id;
+    input[INPUT] = payload;
+    const transaction = crypto.sign(input, keys.secretKey);
 
-const transact = (msg, transactionBuffer, action, payload, response, cb) => {
-    const transaction = crypto.sign({
-        contract: keys.publicKey,
-        action: action.names[0],
-        sender: msg.author.id,
-        payload
-    }, keys.secretKey);
-    const account = null;
     return new Promise(resolve => {
-        transactionBuffer.push({
-            transaction, publicKey: keys.publicKey,
-            callback: async (error, data, { simtime, finaltime }, block) => {
-                resolve(data);
-                if (error && error.message) {
-                    msg.channel.send(error.message);
-                } else {
-                    const reply = new Discord.MessageEmbed()
-                        .setTitle(`BLOCK ${block ? block.h : ''} TRANSACTION VERIFIED`)
-                        .setAuthor('Chakrachain', 'https://i.imgflip.com/r1u53.jpg', 'https://discord.js.org')
-                        .setDescription(response)
-                        .setFooter(`Chakrachain (SIM:${simtime}/FINAL:${finaltime})`);
-                    const rep = await msg.channel.send(reply);
-                    setTimeout(()=>{rep.delete().catch(()=>{})}, 10000)
-                    if(cb) cb(rep)
-                }
+        const out = {};
+        out[TRANSACTION] = transaction;
+        out[PUBLICKEY] = keys.publicKey;
+        out[CALLBACK] = async (output) => {
+            console.log({output});
+            if (output[ERROR] && output[ERROR].message) {
+                msg.channel.send(output[ERROR].message);
+                throw new Error(output);
+            } else {
+                const reply = new Discord.MessageEmbed()
+                    .setTitle(`BLOCK ${output[HEIGHT] ? output[HEIGHT] : ''} TRANSACTION VERIFIED`)
+                    .setAuthor('Chakrachain', 'https://i.imgflip.com/r1u53.jpg', 'https://discord.js.org')
+                    .setDescription(response)
+                    .setFooter(`Chakrachain (TIME:${output.t})`);
+                const rep = await msg.channel.send(reply);
+                setTimeout(() => { rep.delete().catch(() => { }) }, 10000)
+                resolve(output);
             }
-        });
-
+        }
+        transactionBuffer.push(out);
     })
 
 }
@@ -61,7 +62,7 @@ const invite = async (msg, action, payload, transactionBuffer) => {
         const symbol = payload.shift();
         const d = payload.join(' ');
         payload = [symbol];
-        payload.push({c:invite.code, n, d, gid, cid, i, ts:new Date().getTime()})
+        payload.push({ c: invite.code, n, d, gid, cid, i, ts: new Date().getTime() })
         transact(msg, transactionBuffer, action, payload, "Edited " + payload[0]);
     } catch (e) {
         msg.channel.send("ERROR: " + e.getmessage);
@@ -83,7 +84,7 @@ const issue = async (msg, action, payload, transactionBuffer) => {
         payload.push(symbol);
     }
     if (!isNumeric(payload[0])) throw Error('Bad account:', payload[0]);
-    response = `Issued ${payload[1]} ${payload[2]} to <@!${payload[0]}>`;
+    response = `Issued ${payload[1]} ${payload[2].toUpperCase()} to <@!${payload[0]}>`;
 
     transact(msg, transactionBuffer, action, payload, response);
 }
@@ -100,9 +101,9 @@ const faucet = async (msg, action, payload, transactionBuffer) => {
     payload[1] = payload[1].toUpperCase();
     const path = `contracts-${keys.publicKey}-balances-${payload[1]}-${msg.author.id}`;
     const loaded = await hyperdrivestorage.read(path);
-    if(parseFloat(payload[0]) > parseFloat(loaded.balance)) await msg.channel.reply('You need more '+symbol)
+    if (parseFloat(payload[0]) > parseFloat(loaded.balance)) await msg.channel.reply('You need more ' + symbol)
     const filter = reaction => reaction.emoji.name === '🍆';
-    const rep = await msg.channel.send(payload[0]+' '+payload[1] + ' available, click on the emoji!')
+    const rep = await msg.channel.send(payload[0] + ' ' + payload[1] + ' available, click on the emoji!')
     await rep.react('🍆');
     const collected = await rep.awaitReactions(filter, { time: 10000, max: 10 });
     const ret = await new Promise(async resolve => {
@@ -117,7 +118,7 @@ const faucet = async (msg, action, payload, transactionBuffer) => {
                         const userCount = users.length - 1;
                         const input = parseFloat(payload[0]);
                         const quantity = new BigNumber(input / userCount).toFixed(8)
-                        await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, transactionBuffer, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` ${payload[1]} to <@!${user}>`, (resp)=>{
+                        await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, transactionBuffer, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` ${payload[1]} to <@!${user}>`, (resp) => {
                         });
                     }
                 }
@@ -128,7 +129,7 @@ const faucet = async (msg, action, payload, transactionBuffer) => {
                 console.error(e);
             }
         })
-        rep.delete().catch(()=>{});
+        rep.delete().catch(() => { });
     })
     return ret;
 }
@@ -141,7 +142,7 @@ const transfer = async (msg, action, payload, transactionBuffer) => {
         return;
     }
     //if (!isNumeric(payload[0])) throw Error('Bad account:', payload[0]);
-    transact(msg, transactionBuffer, action, payload, `Transferred ${payload[1]} ${payload[2]} to <@!${payload[0]}>`);
+    transact(msg, transactionBuffer, action, payload, `Transferred ${payload[1]} ${payload[2].toUpperCase()} to <@!${payload[0]}>`);
 
 }
 
@@ -153,18 +154,16 @@ const balances = async (msg, action, payload, transactionBuffer) => {
         .setFooter('Chakrachain');
     try {
         const files = await hyperdrivestorage.ls(path);
-        
+
         for (const fi of files) {
-            console.log(fi)
             const loaded = await hyperdrivestorage.read(`contracts-${keys.publicKey}-balances-${fi}-${msg.author.id}`);
             const token = await hyperdrivestorage.read(`contracts-${keys.publicKey}-tokens-${fi}`);
-            console.log(token);
-            if (loaded) exampleEmbed.addFields({ name: fi, value: (typeof token.invite=='object' ? `\n[Join Discord](https://discord.gg/${token.invite.c})\n` : '') + loaded.balance, inline: true });
+            if (loaded) exampleEmbed.addFields({ name: fi, value: (typeof token.invite == 'object' ? `\n[Join Discord](https://discord.gg/${token.invite.c})\n` : '') + loaded.balance, inline: true });
         }
         const sent = await msg.channel.send(exampleEmbed);
-        setTimeout(()=>{sent.delete().catch(()=>{})}, 30000)
-    } catch (e) {
-        console.error(e);
+        setTimeout(() => { sent.delete().catch(() => { }) }, 30000)
+    } catch (error) {
+        console.error(error);
         msg.channel.send("You dont have any balances yet.")
     }
 }
@@ -190,22 +189,22 @@ const pools = async (msg, action, payload, transactionBuffer) => {
         const pool = await hyperdrivestorage.read(`contracts-${keys.publicKey}-pool-${fi}`);
         let poolbalance1 = parseFloat(pool[token.symbol]);
         let poolbalance2 = parseFloat(pool[ROOT_TOKEN]);
-        let ratio = poolbalance2/poolbalance1;
+        let ratio = poolbalance2 / poolbalance1;
         //if (poolbalance1>0 && poolbalance2>0) {
-            fields.push({ name: fi, ratio, pool, token })
+        fields.push({ name: fi, ratio, pool, token })
         //}
     }
     fields.sort((a, b) => { return b.pool[ROOT_TOKEN] - a.pool[ROOT_TOKEN] });
     for (let field of fields) {
-        console.log(field);
-        exampleEmbed.addFields({ 
-            name: field.name, 
+        exampleEmbed.addFields({
+            name: field.name,
             value: (typeof field.token.invite == 'object' ? `[Join Discord](https://discord.gg/${field.token.invite.c})\n` : '') +
-            `${field.name}: ${field.pool[field.name]}\n${ROOT_TOKEN}: ${BigNumber(field.pool[ROOT_TOKEN]).toFixed(4)}\nPrice: ${(field.ratio).toFixed(4)}`,
-             inline: true });
+                `${field.name}: ${field.pool[field.name]}\n${ROOT_TOKEN}: ${BigNumber(field.pool[ROOT_TOKEN]).toFixed(4)}\nPrice: ${(field.ratio).toFixed(4)}`,
+            inline: true
+        });
     }
     const sent = await msg.channel.send(exampleEmbed);
-    setTimeout(()=>{if(sent.delete) sent.delete().catch(()=>{})}, 30000)
+    setTimeout(() => { if (sent.delete) sent.delete().catch(() => { }) }, 30000)
 }
 
 const balance = async (msg, action, payload, transactionBuffer) => {
@@ -222,7 +221,7 @@ const balance = async (msg, action, payload, transactionBuffer) => {
         .setDescription(response)
         .setFooter('Chakrachain');
     const sent = msg.channel.send(exampleEmbed);
-    setTimeout(()=>{if(sent.delete) sent.delete().catch(()=>{})}, 30000)
+    setTimeout(() => { if (sent.delete) sent.delete().catch(() => { }) }, 30000)
 }
 
 const help = async (msg) => {
@@ -307,7 +306,7 @@ const swap = async (msg, action, payload, transactionBuffer) => {
     let ratio
     symbol1 = payload[1].toUpperCase();
     symbol2 = payload[2].toUpperCase();
-    const notroot = symbol1!=ROOT_TOKEN?symbol1:symbol2;
+    const notroot = symbol1 != ROOT_TOKEN ? symbol1 : symbol2;
     const calcRatio = async (symbol1, symbol2) => {
         const pool = await hyperdrivestorage.read(`contracts-${keys.publicKey}-pool-${symbol1}`);
         let poolbalance1 = parseFloat(pool[symbol1]);
@@ -316,16 +315,16 @@ const swap = async (msg, action, payload, transactionBuffer) => {
     }
     if (symbol1 == ROOT_TOKEN || symbol2 == ROOT_TOKEN) {
         ratio = await calcRatio(notroot, ROOT_TOKEN);
-        if(notroot == symbol2) ratio = 1 / ratio;
+        if (notroot == symbol2) ratio = 1 / ratio;
     } else {
         const ratio1 = await calcRatio(symbol1, ROOT_TOKEN);
         const ratio2 = await calcRatio(symbol2, ROOT_TOKEN);
-        ratio = ratio2/ratio1;
+        ratio = ratio2 / ratio1;
     }
     response = `Swapped ${payload[0]} ${symbol1} for ${calculateBalance(0, quantity * ratio, 8, true)} ${symbol2}`;
     transact(msg, transactionBuffer, action, payload, response);
 }
-let faucets=0;
+let faucets = 0;
 exports.actions = [
     {
         names: ['create'],
@@ -367,23 +366,23 @@ exports.actions = [
         names: ['autofaucet'],
         call: (msg, action, payload, transactionBuffer) => {
             let times = parseInt(payload[2]);
-            if(times > 10) times = 10;
+            if (times > 10) times = 10;
             ++faucets;
-            const run = async () => { 
+            const run = async () => {
                 try {
-                if (times < 1) {
-                    --faucets;
-                    clearInterval(int);
-                }
-                
-                const path = `contracts-${keys.publicKey}-balances-${payload[1].toUpperCase()}-${msg.author.id}`;
-                const loaded = await hyperdrivestorage.read(path);
-                if(loaded.balance < parseFloat(payload[1])) {
-                    --faucets;
-                    clearInterval(int);
-                }
-                if (await faucet(msg, action, payload, transactionBuffer)) times--;
-                } catch(e) {
+                    if (times < 1) {
+                        --faucets;
+                        clearInterval(int);
+                    }
+
+                    const path = `contracts-${keys.publicKey}-balances-${payload[1].toUpperCase()}-${msg.author.id}`;
+                    const loaded = await hyperdrivestorage.read(path);
+                    if (loaded.balance < parseFloat(payload[1])) {
+                        --faucets;
+                        clearInterval(int);
+                    }
+                    if (await faucet(msg, action, payload, transactionBuffer)) times--;
+                } catch (e) {
                     console.log(e);
                     --faucets;
                     clearInterval(int);

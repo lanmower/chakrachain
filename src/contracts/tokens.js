@@ -11,8 +11,8 @@
       [symbol && typeof symbol === "string", "bad symbol"],
       [symbol2 && typeof symbol === "string", "bad symbol"],
       [quantity, "no quantity"],
-      [typeof quantity === "string", "quantity must be a string"],
-      [!api.BigNumber(quantity).isNaN(), "quantity must be a number"]
+      [typeof quantity === "string", "quantity must be a string: <quantity> <fron type> <to type>"],
+      [!api.BigNumber(quantity).isNaN(), "quantity must be a number: <quantity> <from type> <to type>"]
     ]);
     const token = await api.read("tokens-" + symbol);
     const token2 = await api.read("tokens-" + symbol2);
@@ -288,8 +288,8 @@
       await api.assert([
         [symbol && typeof symbol === "string", "bad name: "+symbol],
         [quantity, "no quantity"],
-        [typeof quantity === "string", "quantity must be a string"],
-        [!api.BigNumber(quantity).isNaN(), "quantity must be a number"],
+        [typeof quantity === "string", "quantity must be a string: <to> <quantity> <symbol>"],
+        [!api.BigNumber(quantity).isNaN(), "quantity must be a number: <to> <quantity> <symbol>"],
         [finalTo.length,'the to address must be filled in: <to> <quantity> <symbol>']
       ]);
       const token = await api.read("tokens-" + symbol);

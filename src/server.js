@@ -4,7 +4,7 @@ const {transactionBuffer} = require('./util/queues.js');
 
 const { createBlock } = require('./blockchain/chain.js');
 const pubsub = exports.pubsub = require("./util/pubsub.js")('chakrachain');
-require('./util/contracts.js');
+require('./util/contracts.js').update(transactionBuffer);
 
 
 /*app.post("/hook", (req, res) => {

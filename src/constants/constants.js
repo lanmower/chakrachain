@@ -1,0 +1,13 @@
+exports.TRANSACTION='tx';
+exports.ERROR='e';
+exports.OUTPUT='o';
+exports.HEIGHT='h';
+exports.TIME='t';
+exports.CALLBACK='cb';
+exports.WRITES='w';
+exports.PUBLICKEY='pk';
+exports.SECRETKEY='sk';
+exports.CONTRACT='c';
+exports.ACTION='a';
+exports.SENDER='s';
+exports.INPUT='i';

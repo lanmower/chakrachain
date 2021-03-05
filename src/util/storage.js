@@ -1,7 +1,5 @@
 var Hyperdrive = require('hyperdrive')
-const crypto = require("crypto");
 var drive = new Hyperdrive('./state')
-const replicate = require('@hyperswarm/replicator')
 const hyperswarm = require("hyperswarm");
 const pump = require('pump')
 drive = new Hyperdrive("./state");

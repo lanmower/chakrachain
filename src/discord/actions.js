@@ -22,7 +22,7 @@ const transact = (msg, transactionBuffer, action, payload, response) => {
             console.log({output});
             if (output[ERROR] && output[ERROR].message) {
                 msg.channel.send(output[ERROR].message);
-                throw new Error(output);
+                throw new Error(output[ERROR].message);
             } else {
                 const reply = new Discord.MessageEmbed()
                     .setTitle(`BLOCK ${output[HEIGHT] ? output[HEIGHT] : ''} TRANSACTION VERIFIED`)
@@ -73,7 +73,7 @@ const issue = async (msg, action, payload, transactionBuffer) => {
     if (payload[0].startsWith("<@"))
         payload[0] = payload[0].replace("<@", "").replace('!', '').replace(">", "");
     if (payload.length < 2) {
-        msg.channel.send('not enough params, token issue (@user) <amount> <symbol>');
+        msg.channel.send('not enough params, #issue (@user) <amount> <symbol>');
         return;
     }
     if (payload.length < 3) {
@@ -93,17 +93,19 @@ const migrate = async (msg, action, payload, transactionBuffer) => {
     transact(msg, transactionBuffer, action, payload, response);
 }
 
-const faucet = async (msg, action, payload, transactionBuffer) => {
+const faucet = async (msg, action, payload, transactionBuffer, channel, author) => {
+    if(!channel) channel=msg.channel;
+    if(!author) author=msg.author;
     if (payload.length < 2) {
         msg.channel.send('not enough params, faucet <amount> <symbol>');
         return;
     }
     payload[1] = payload[1].toUpperCase();
-    const path = `contracts-${keys.publicKey}-balances-${payload[1]}-${msg.author.id}`;
+    const path = `contracts-${keys.publicKey}-balances-${payload[1]}-${author.id}`;
     const loaded = await hyperdrivestorage.read(path);
-    if (parseFloat(payload[0]) > parseFloat(loaded.balance)) await msg.channel.reply('You need more ' + symbol)
+    if (parseFloat(payload[0]) > parseFloat(loaded.balance)) await channel.send('You need more ' + payload[1])
     const filter = reaction => reaction.emoji.name === '🍆';
-    const rep = await msg.channel.send(payload[0] + ' ' + payload[1] + ' available, click on the emoji!')
+    const rep = await channel.send(payload[0] + ' ' + payload[1] + ' available, click on the emoji!')
     await rep.react('🍆');
     const collected = await rep.awaitReactions(filter, { time: 10000, max: 10 });
     const ret = await new Promise(async resolve => {
@@ -129,7 +131,7 @@ const faucet = async (msg, action, payload, transactionBuffer) => {
                 console.error(e);
             }
         })
-        rep.delete().catch(() => { });
+        setTimeout(()=>{rep.delete().catch(() => { })}, 1000);
     })
     return ret;
 }
@@ -209,7 +211,7 @@ const pools = async (msg, action, payload, transactionBuffer) => {
 
 const balance = async (msg, action, payload, transactionBuffer) => {
     if (payload.length < 1) {
-        msg.channel.send('Please specify token.');
+        msg.channel.send('Please specify tradable.');
     }
     payload[0] = payload[0].toUpperCase();
     const path = `contracts-${keys.publicKey}-balances-${payload[0]}-${msg.author.id}`;
@@ -232,8 +234,8 @@ ledger to store your transactional history
 
 Available commands:
     
-token create <symbol>
-Creates a new token
+#create <symbol>
+Creates a new tradable
 
 #issue <@user> <amount> <name>
 issues to user
@@ -241,11 +243,11 @@ issues to user
 #issue <amount> <name>
 issues to self
 
-#pool <token amount> <token> <${ROOT_TOKEN} amount>
-pool token with ${ROOT_TOKEN}
+#pool <tradable amount> <tradable> <${ROOT_TOKEN} amount> ${ROOT_TOKEN}
+pool tradable with ${ROOT_TOKEN}
 
 #swap <amount> <from name> <to name>
-swaps a token for ${ROOT_TOKEN} or from ${ROOT_TOKEN}
+swaps a tradable for ${ROOT_TOKEN} or from ${ROOT_TOKEN}
 
 #bals
 display balances
@@ -257,16 +259,16 @@ display pools
 display pools
 
 #send <@user> <amount> <name>
-perform a token transfer
+send to user
 
 #faucet <amount> <name>
-hand the token out to emoji clickers, after 10 seconds
+hand the tradable out to emoji clickers, after 10 seconds
 
 #autofaucet <amount> <name> <count>
 run autofaucet until x amount of handouts are reached
 
 #invite <name> <description>
-link your token to the current discord channel with an invite
+link your tradable to the current discord channel with an invite
 
 #link
 invite this bot to your discord
@@ -381,7 +383,7 @@ exports.actions = [
                         --faucets;
                         clearInterval(int);
                     }
-                    if (await faucet(msg, action, payload, transactionBuffer)) times--;
+                    if (await faucet(msg, action, payload, transactionBuffer, msg.channel, msg.author)) times--;
                 } catch (e) {
                     console.log(e);
                     --faucets;

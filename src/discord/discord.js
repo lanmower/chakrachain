@@ -1,5 +1,5 @@
 let client;
-const {transactionBuffer} = require('../util/queues.js');
+const {transactionBuffer} = require('../blockchain/chain.js');
 const { actions } = require("./actions.js");
 const Discord = require("discord.js");
 
@@ -17,9 +17,10 @@ client.on("message", async msg => {
                 try {
                     msg.channel.startTyping();
                     await action.call(msg, action, payload, transactionBuffer);
-                    msg.channel.stopTyping();
                 } catch (e) {
                     console.error(e);
+                } finally {
+                    msg.channel.stopTyping();
                 }
             }
         }

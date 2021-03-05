@@ -4,8 +4,15 @@ const { Packr } = require('msgpackr');
 let packr = new Packr();
 var log = hypercore('./blocklog', { valueEncoding: 'binary' })
 var txlog = hypercore('./txlog', { valueEncoding: 'binary' })
+const transactionBuffer = exports.transactionBuffer = [];
+require('../util/contracts.js').update(transactionBuffer);
 const { processTransaction } = require('./transaction.js');
-const { TRANSACTION, ERROR, HEIGHT, CALLBACK } = require('../constants/constants.js');
+const { TRANSACTION, ERROR, HEIGHT, CALLBACK, WRITES, TRANSACTIONS } = require('../constants/constants.js');
+const pubsub = exports.pubsub = require("../util/pubsub.js")('chakrachain');
+
+pubsub.on('tx', (t) => {
+    transactionBuffer.push(t);
+});
 
 const logGet = (i) => {
     return new Promise(resolve => {
@@ -16,48 +23,45 @@ const logGet = (i) => {
     })
 }
 
-exports.createBlock = async (transactionBuffer) => {
+const createBlock = exports.createBlock = async (transactionBuffer) => {
     try {
         let block = await logGet(log.length - 1).catch(() => { }) || {};
-        const transactions = {};
-        if (!block[TRANSACTION]) block[TRANSACTION] = 1;
-        if (!block[HEIGHT]) block[HEIGHT] = log.length;
-
+        delete block.transaction;
+        block[TRANSACTION] = txlog.length;
+        block[HEIGHT] = log.length;
+        block[TRANSACTIONS] = [];
+        block[ERROR] = [];
         while (transactionBuffer.length) {
             const tx = transactionBuffer.shift();
             const result = await processTransaction(tx);
-            result[TRANSACTION]= tx;
-
-            const callback = tx[CALLBACK];
-            delete tx[TRANSACTION];
-            try {if(typeof callback=='function') callback(result); } catch (e) { console.error(e) };
-            tx[++block[TRANSACTION]] = result;
-            
-        }
-        for (let key in transactions) {
-            const transaction = transactions[key];
-            if (typeof transaction[TRANSACTION][CALLBACK] == 'function') {
-            } else throw new Error('transaction callback must be a function');
+            try {
+                if (typeof tx[CALLBACK] == 'function') tx[CALLBACK](result);
+            } catch (e) { console.error(e) };
+            delete tx[CALLBACK];
+            if (!result[ERROR]) block[TRANSACTIONS].push(result);
+            else block[ERROR].push(result);
         }
         return new Promise(async resolve => {
-            block[TRANSACTION] = Object.keys(transactions).filter((key) => { return !transactions[key][ERROR] });
-            block[ERROR] = Object.keys(transactions).filter((key) => { return transactions[key][ERROR] });
-            console.log(block);
-            for (tx of block[TRANSACTION]) {
-                for (write in tx[WRITES]) {
-                    await hyperdrivestorage.write(write, output[WRITES][write]);
-                }
+            for (h in Object.keys(block[TRANSACTIONS])) {
                 const output = {};
-                output[HEIGHT] = h;
+                const tx = block[TRANSACTIONS][h];
+                for (write in tx[WRITES]) {
+                    await hyperdrivestorage.write(write, tx[WRITES][write]);
+                }
+                output[HEIGHT] = txlog.length;
                 output[TRANSACTION] = tx;
                 await txlog.append(packr.pack(output));
             }
-
-            if (transactions.length) {
+            if (block[TRANSACTIONS].length) {
                 await log.append(packr.pack(block));
+                console.log('done processing ', block.height)
+                block.log = log.key;
+                block.txlog = txlog.key;
+                pubsub.emit("block", block);
                 resolve(block);
             }
             else {
+                console.log('no tx', block);
                 resolve({ msg: 'no tx' });
             }
         });
@@ -69,3 +73,17 @@ exports.createBlock = async (transactionBuffer) => {
         return {};
     }
 };
+
+let running;
+setInterval(async () => {
+    if (running) return;
+    running = true;
+    if (transactionBuffer.length) {
+        try {
+            await createBlock(transactionBuffer);
+        } catch (e) {
+            console.error("error creating block", e);
+        }
+    }
+    running = false;
+}, 250);

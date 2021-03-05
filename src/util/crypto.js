@@ -5,7 +5,7 @@ exports.util = util;
 const { Packr } = require('msgpackr');
 let packr = new Packr();
 
-const lsign = exports.sign = (obj, key) => {
+exports.sign = (obj, key) => {
   const keyUint8Array =  new Uint8Array(Buffer.from(key, 'hex'));
   const packed = packr.pack(obj);
   const messageUint8 = new Uint8Array(packed);
@@ -13,9 +13,7 @@ const lsign = exports.sign = (obj, key) => {
   return Buffer.from(box).toString('binary');
 };
 
-
-
-const lverify = exports.verify = (msg, key) => {
+exports.verify = (msg, key) => {
   if(msg == null) throw new Error('Cannot verify null message');
   if(key == null) throw new Error('Cannot verify null key');
   const keyUint8Array = new Uint8Array(Buffer.from(key, 'hex'));

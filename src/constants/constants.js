@@ -1,4 +1,5 @@
 exports.TRANSACTION='tx';
+exports.TRANSACTIONS='txs';
 exports.ERROR='e';
 exports.OUTPUT='o';
 exports.HEIGHT='h';

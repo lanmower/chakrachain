@@ -1,5 +1,5 @@
 /* global actions, api, assert, decimals, addBalance */
-//v1
+//v0.9
 () => {
   const ROOT_TOKEN = "C";
   const decimals = value => api.BigNumber(value).dp();
@@ -17,26 +17,28 @@
     const token = await api.read("tokens-" + symbol);
     const token2 = await api.read("tokens-" + symbol2);
 
-    const nonroot = symbol!=ROOT_TOKEN?symbol:symbol2;
+    const nonroot = symbol != ROOT_TOKEN ? symbol : symbol2;
     const pool = await api.read("pool-" + nonroot);
 
-    let poolbalance1 = parseFloat(pool[symbol])||0;
-    let poolbalance2 = parseFloat(pool[symbol2])||0;
+    let poolbalance1 = parseFloat(pool[symbol]) || 0;
+    let poolbalance2 = parseFloat(pool[symbol2]) || 0;
     api.assert(pool, 'please pool some tokens first: ```token pool <amount> <tokenname> <' + ROOT_TOKEN + ' amount>``` and then you can swap.');
-    let ratio = poolbalance2/poolbalance1;
-    api.assert(pool[symbol2] > (quantity * ratio), `Not enough ${symbol} ${(symbol2!=ROOT_TOKEN?`in the ${symbol2} pool `:'')}: ${pool.balance} ${symbol} available`);
+    let ratio = poolbalance2 / poolbalance1;
+    api.assert(pool[symbol2] > (quantity * ratio), `Not enough ${symbol} ${(symbol2 != ROOT_TOKEN ? `in the ${symbol2} pool ` : '')}: ${pool.balance} ${symbol} available`);
 
-    await subBalance(api.sender, token, quantity);
+    console.log('subbing', { token, quantity })
+    console.log('adding', { token2, quantity: quantity * ratio })
 
     const poolamnt = quantity * 0.95;
     const feeamnt = quantity * 0.05;
+    await subBalance(api.sender, token, quantity);
 
-    pool[symbol] = calculateBalance(pool[symbol]||0, poolamnt, 8, true);
-    pool['rewards'] = calculateBalance(pool['rewards']||0, feeamnt, 8, true);
-    pool[symbol2] = calculateBalance(pool[symbol2]||0, quantity*ratio, 8, false);
-    api.assert(pool[symbol2] > 0, 'pool overdrawn, needs more '+symbol2);
+    pool[symbol] = calculateBalance(pool[symbol] || 0, poolamnt, 8, true);
+    pool['rewards'] = calculateBalance(pool['rewards'] || 0, feeamnt, 8, true);
+    pool[symbol2] = calculateBalance(pool[symbol2] || 0, quantity * ratio, 8, false);
+    api.assert(pool[symbol2] > 0, 'pool overdrawn, needs more ' + symbol2);
 
-    await api.write('pool-'+nonroot, pool)
+    await api.write('pool-' + nonroot, pool)
 
     await addBalance(api.sender, token2, quantity * ratio);
 
@@ -46,7 +48,7 @@
       [api.BigNumber(quantity).gt(0), "must transfer positive quantity"]
     ]);
     await addAccount(api.sender, token2);
-    return api.BigNumber(quantity * ratio).toFixed(token2.precision);
+    return quantity;
   }
 
   const addBalance = async (account, token, quantity, table = "balances", type = 'balance') => {
@@ -71,7 +73,7 @@
     ).toString();
     api.assert(
       api.BigNumber(balance.balance).gt(originalBalance),
-      "cannot add "+quantity+" to "+originalBalance
+      "cannot add " + quantity + " to " + originalBalance
     );
 
     await api.write(table + "-" + token.symbol + "-" + account, balance, type = 'balance');
@@ -115,15 +117,14 @@
   };
 
   const addAccount = async (account, token) => {
-    await api.write("accounts-" + account + "-" + token.symbol, {enabled:true});
+    await api.write("accounts-" + account + "-" + token.symbol, { enabled: true });
   };
-
   const balanceTemplate = {
     account: null,
     symbol: null,
     balance: "0"
-  };
-  if((api.publicKey != api.contract) || !api.validator.isInt(api.sender)) api.sender = api.publicKey; //if its not the creator of the contract, or its not from discord (numeric accs, for oracle side storage), only allow to act on behalf of 
+  }; 
+  if ((api.publicKey != api.contract) || (!api.sender || !api.validator.isInt(api.sender))) api.sender = api.publicKey; //if its not the creator of the contract, or its not from discord (numeric accs, for oracle side storage), only allow to act on behalf of 
   return {
     invite: async payload => {
       payload[0] = payload[0].toUpperCase();
@@ -165,10 +166,10 @@
       ]);
       const r = await api.read("tokens-" + ROOT_TOKEN);
 
-      if(r) api.assert(await subBalance(api.sender, r, "10"), 'You need 10 C to create a token, pool your token and someone will dump in some C.' + ROOT_TOKEN);
+      if (r) api.assert(await subBalance(api.sender, r, "10"), 'You need 10 C to create a token, pool your token and someone will dump in some C.' + ROOT_TOKEN);
 
       const token = await api.read("tokens-" + symbol);
-      if (token) throw new Error(symbol+" already exists");
+      if (token) throw new Error(symbol + " already exists");
 
       const newToken = {
         issuer: api.sender,
@@ -221,17 +222,19 @@
       await addAccount(finalTo, token);
     },
     swap: async payload => {
+      console.log("SWAP");
       const [quantity, s, s2] = payload;
       const symbol = s.toUpperCase();
       const symbol2 = s2.toUpperCase()
       if (symbol != ROOT_TOKEN && symbol2 != ROOT_TOKEN) {
         const rootquantity = await swap([quantity, symbol, ROOT_TOKEN]);
+
         await swap([rootquantity, ROOT_TOKEN, symbol2]);
       } else await swap(payload);
     },
     pool: async payload => {
       let [quantity, symbol, rootquantity] = payload;
-      if(symbol == ROOT_TOKEN) throw new Error('can not pool '+ROOT_TOKEN+' try pool a created token')
+      if (symbol == ROOT_TOKEN) throw new Error('can not pool ' + ROOT_TOKEN + ' try pool a created token')
       api.assert([
         [symbol && typeof symbol === "string", "bad name"],
         [typeof quantity === "string", "quantity must be a string"],
@@ -245,18 +248,18 @@
 
       const token = await api.read("tokens-" + symbol);
       let pool = await api.read("pool-" + symbol);
-      if(!pool) {
+      if (!pool) {
         pool = {};
-        pool[ROOT_TOKEN]=0
-        pool[symbol]=0;
-        pool['rewards']=0
+        pool[ROOT_TOKEN] = 0
+        pool[symbol] = 0;
+        pool['rewards'] = 0
       }
       const r = await api.read("tokens-" + ROOT_TOKEN);
       if (!token) throw new Error("does not exist")
 
       api.assert([
-        [decimals(quantity) <= token.precision, "precision mismatch on "+token.symbol],
-        [decimals(rootquantity) <= r.precision, "precision mismatch on "+r.symbol],
+        [decimals(quantity) <= token.precision, "precision mismatch on " + token.symbol],
+        [decimals(rootquantity) <= r.precision, "precision mismatch on " + r.symbol],
       ]);
       if (quantity) {
         await subBalance(api.sender, token, quantity);
@@ -265,16 +268,16 @@
         await subBalance(api.sender, r, rootquantity)
         await addBalance(api.sender, token, rootquantity, 'pools');
       }
-      if(isNaN(pool[ROOT_TOKEN])) pool[ROOT_TOKEN]='0';
-      if(isNaN(pool[symbol])) pool[symbol]='0';
+      if (isNaN(pool[ROOT_TOKEN])) pool[ROOT_TOKEN] = '0';
+      if (isNaN(pool[symbol])) pool[symbol] = '0';
       pool[ROOT_TOKEN] = calculateBalance(
-        pool[ROOT_TOKEN]||'0',
+        pool[ROOT_TOKEN] || '0',
         rootquantity,
         r.precision,
         true
       );
       pool[symbol] = calculateBalance(
-        pool[symbol]||'0',
+        pool[symbol] || '0',
         quantity,
         token.precision,
         true
@@ -286,11 +289,11 @@
       const [to, quantity, symbol] = payload;
       const finalTo = to.trim();
       await api.assert([
-        [symbol && typeof symbol === "string", "bad name: "+symbol],
+        [symbol && typeof symbol === "string", "bad name: " + symbol],
         [quantity, "no quantity"],
         [typeof quantity === "string", "quantity must be a string: <to> <quantity> <symbol>"],
         [!api.BigNumber(quantity).isNaN(), "quantity must be a number: <to> <quantity> <symbol>"],
-        [finalTo.length,'the to address must be filled in: <to> <quantity> <symbol>']
+        [finalTo.length, 'the to address must be filled in: <to> <quantity> <symbol>']
       ]);
       const token = await api.read("tokens-" + symbol);
       if (!token || !token.precision) throw new Error("does not exist");
@@ -303,5 +306,5 @@
       if (res) await addBalance(finalTo, token, quantity);
       await addAccount(finalTo, token);
     }
-  };
+  }
 }

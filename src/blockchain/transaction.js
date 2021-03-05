@@ -2,20 +2,20 @@ const { BigNumber } = require("bignumber.js");
 const { VM, VMScript } = require("vm2");
 const validator = require("validator");
 const crypto = require('../util/crypto.js');
-const {getCache,setCache} = require('../util/cache.js');
+const { getCache, setCache } = require('../util/cache.js');
 const hyperdrivestorage = require('../util/storage.js');
-const {ERROR, OUTPUT, WRITES, TIME, TRANSACTION, PUBLICKEY, CONTRACT, INPUT, ACTION, SENDER}=require('../constants/constants.js');//
+const { ERROR, OUTPUT, WRITES, TIME, TRANSACTION, PUBLICKEY, CONTRACT, INPUT, ACTION, SENDER } = require('../constants/constants.js');//
 
-const verify = (input) =>{
+const verify = (input) => {
     let tx = crypto.verify(input[TRANSACTION], input[PUBLICKEY]);
-    if(!tx) throw new Error('Transaction from '+input[PUBLICKEY]+' not verified');
-    if(tx instanceof Map) tx = Object.fromEntries(tx);
+    if (!tx) throw new Error('Transaction from ' + input[PUBLICKEY] + ' not verified');
+    if (tx instanceof Map) tx = Object.fromEntries(tx);
     return tx;
 }
 const parseSrc = (src) => {
     let codetext = `
-    RegExp.prototype.constructor = function () { };RegExp.prototype.exec = function () {  };RegExp.prototype.test = function () {  }; const construct = ${src.code}
-    let actions = construct();  
+    RegExp.prototype.constructor = function () { };RegExp.prototype.exec = function () {  };RegExp.prototype.test = function () {  }; const construct = api.transaction['${ACTION}']!='setContract'?${src.code}:()=>{}
+    try { let actions = construct(); } catch(e) {console.error(e)}
     run = async() => {
         if (api.transaction['${ACTION}'] == 'setContract') {
             const time = new Date().getTime();
@@ -36,10 +36,10 @@ const parseSrc = (src) => {
     `;
     return new VMScript(codetext);
 }
-const getApi = (transaction, publicKey) =>{
+const getApi = (transaction, publicKey) => {
     const sender = transaction[SENDER];
     const contract = transaction[CONTRACT];
-    const api ={
+    const api = {
         assert: (check, msg) => {
             if (Array.isArray(check)) {
                 for (let c of check) {
@@ -69,18 +69,16 @@ const getApi = (transaction, publicKey) =>{
         transaction,
         emit: () => { }
     }
-    return api;    
+    return api;
 }
 
 exports.processTransaction = async (input) => {
-    console.log({input})
     const tx = verify(input);
-
     const contract = tx[CONTRACT];
-    
-    await setCache(`contracts-${contract}-current`, 'code', parseSrc);
-    const api = getApi(tx, input[PUBLICKEY], tx);
 
+    await setCache(`contracts-${contract}-current`, 'code', parseSrc);
+
+    const api = getApi(tx, input[PUBLICKEY]);
     const vm = new VM({
         timeout: 1000
     });
@@ -90,21 +88,23 @@ exports.processTransaction = async (input) => {
     return await new Promise(async (resolve) => {
         vm._context.done = (error, result) => {
             const output = {};
-            output[ERROR]=error;
-            output[OUTPUT]=result;
-            output[WRITES]=writes;
-            output[TIME]=new Date().getTime() - time
+            output[ERROR] = error;
+            output[OUTPUT] = result;
+            output[WRITES] = writes;
+            output[TIME] = new Date().getTime() - time
+            output[TRANSACTION] = input;
             resolve(output);
         }
         vm._context.api = api;
         vm._context.console = console;
+        console.log('running VM')
         try {
             vm.run(getCache('code', `contracts-${contract}-current`));
         } catch (error) {
             console.error(error);
             const result = {};
             result[ERROR] = error;
-            result[TIME] =  new Date().getTime() - time;
+            result[TIME] = new Date().getTime() - time;
             resolve(result);
         }
     })

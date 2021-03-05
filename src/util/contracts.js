@@ -2,7 +2,7 @@ const fs = require("fs");
 const crypto = require('./crypto.js');
 const hyperdrivestorage = require('./storage.js');
 const keys = require('./keys.js');
-const { TRANSACTION, CALLBACK, PUBLICKEY, CONTRACT, ACTION, INPUT, SENDER, ERROR, HEIGHT } = require('../constants/constants.js');
+const { TRANSACTION, PUBLICKEY, CONTRACT, ACTION, INPUT } = require('../constants/constants.js');
 
 exports.update = async (transactionBuffer) => {
     const code = fs.readFileSync('src/contracts/tokens.js').toString();

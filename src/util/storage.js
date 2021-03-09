@@ -16,15 +16,13 @@ drive.ready(() => {
     announce: true,
     lookup: true
   });
+  console.log(drive.version);
+  setInterval(()=>{console.log(drive.peers.length)}, 30000)
+  console.log(drive.key.toString('hex'));
 });
 
 const { Packr } = require('msgpackr');
 let packr = new Packr();
-
-String.prototype.replaceAll = function (search, replacement) {
-    var target = this;
-    return target.replace(new RegExp(search, 'g'), replacement);
-};
 
 const read = (p) => {
     path = p.replaceAll('-', '/');

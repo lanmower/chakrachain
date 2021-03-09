@@ -15,11 +15,12 @@ function server(tstring) {
     .createHash("sha256")
     .update(tstring)
     .digest();
+    console.log(tstring, topic.toString('hex'))
   const localId = getId(crypto.randomBytes(30));
   const swarm = hyperswarm();
   swarm.join(topic, {
-    lookup: true, // find & connect to peers
-    announce: true // optional- announce self as a connection target
+    lookup: true,
+    announce: true
   });
   const funcmap = {};
   const sockets = [];
@@ -30,8 +31,7 @@ function server(tstring) {
         const data = packr.unpack(bytes);
         switch (data.e) {
           case "r":
-            if (info.deduplicate(localId, Buffer.from(data.id, "binary")))
-              break;
+            if (info.deduplicate(localId, Buffer.from(data.id, "binary"))) break;
             sockets.push(socket);
             break;
           case "e":

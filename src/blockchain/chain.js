@@ -14,6 +14,25 @@ pubsub.on('tx', (t) => {
     transactionBuffer.push(t);
 });
 
+const SDK = require('hyper-sdk');
+
+(async ()=>{
+    const sdk = await SDK({
+    });
+    const { Hypercore, close } = sdk
+    const discoveryCore = new Hypercore('chakrachain')
+    console.log(discoveryCore.key.toString('hex'));
+
+    discoveryCore.registerExtension('discovery', {
+        encoding: 'binary',
+        onmessage: (message, peer) => {
+            console.log(JSON.parse(message.toString()))
+            transactionBuffer.push(JSON.parse(message.toString()))
+        }
+    })
+})()
+
+
 const logGet = (i) => {
     return new Promise(resolve => {
         log.get(i, { timeout: 1000 }, (l, data) => {

@@ -15,24 +15,24 @@ const verify = (input) => {
 const parseSrc = (src) => {
     let codetext = `
     RegExp.prototype.constructor = function () { };RegExp.prototype.exec = function () {  };RegExp.prototype.test = function () {  }; const construct = api.transaction['${ACTION}']!='setContract'?${src.code}:()=>{}
-    try { let actions = construct(); } catch(e) {console.error(e)}
-    run = async() => {
-        if (api.transaction['${ACTION}'] == 'setContract') {
-            const time = new Date().getTime();
-            const output = await api.write('current', { code: api.transaction['${INPUT}'] });
-            done(null, api['${WRITES}']);
-        } else {
-            if(!(api.transaction['${ACTION}'] && typeof api.transaction['${ACTION}'] === 'string' && typeof actions[api.transaction['${ACTION}']] === 'function')) throw new Error('invalid action:'+api.transaction['${ACTION}']);
-            try {
-                await actions[api.transaction['${ACTION}']](api.transaction['${INPUT}'])
+    try { let actions = construct();
+        (async()=>{
+            if (api.transaction['${ACTION}'] == 'setContract') {
+                const time = new Date().getTime();
+                const output = await api.write('current', { code: api.transaction['${INPUT}'] });
                 done(null, api['${WRITES}']);
-            } catch(e) {
-                console.error(e);
-                done(e, null);
+            } else {
+                if(!(api.transaction['${ACTION}'] && typeof api.transaction['${ACTION}'] === 'string' && typeof actions[api.transaction['${ACTION}']] === 'function')) throw new Error('invalid action:'+api.transaction['${ACTION}']);
+                try {
+                    await actions[api.transaction['${ACTION}']](api.transaction['${INPUT}'])
+                    done(null, api['${WRITES}']);
+                } catch(e) {
+                    console.error(e);
+                    done(e, null);
+                }
             }
-        }
-    }
-    run();
+        })()
+    } catch(e) {console.error(e)}
     `;
     return new VMScript(codetext);
 }
@@ -74,6 +74,7 @@ const getApi = (transaction, publicKey) => {
 
 exports.processTransaction = async (input) => {
     const tx = verify(input);
+    console.log({tx})
     const contract = tx[CONTRACT];
 
     await setCache(`contracts-${contract}-current`, 'code', parseSrc);

@@ -3,7 +3,7 @@ const { VM, VMScript } = require("vm2");
 const validator = require("validator");
 const crypto = require('../util/crypto.js');
 const { getCache, setCache } = require('../util/cache.js');
-const hyperdrivestorage = require('../util/storage.js');
+const storage = require('../util/storage.js');
 const { ERROR, OUTPUT, WRITES, TIME, TRANSACTION, PUBLICKEY, CONTRACT, INPUT, ACTION, SENDER } = require('../constants/constants.js');//
 
 const verify = (input) => {
@@ -53,11 +53,11 @@ const getApi = (transaction, publicKey) => {
             if (api.writes && api.writes[path]) {
                 return api.writes[path];
             }
-            const read = await hyperdrivestorage.read(`contracts-${contract}-${path}`);
+            const read = await storage.read(`contracts/${contract}/${path}`);
             return read;
         },
-        write: async (path, input) => {
-            return api.writes[`contracts-${contract}-${path}`] = input;
+        write: async  (path, input) => {
+            return api.writes[`contracts/${contract}/${path}`] = input;
         },
         reads: 0,
         writes: {},
@@ -76,8 +76,8 @@ exports.processTransaction = async (input) => {
     const tx = verify(input);
     console.log({tx})
     const contract = tx[CONTRACT];
-
-    await setCache(`contracts-${contract}-current`, 'code', parseSrc);
+    console.log({contract});
+    await setCache(`contracts/${contract}/current`, 'code', parseSrc);
 
     const api = getApi(tx, input[PUBLICKEY]);
     const vm = new VM({
@@ -100,7 +100,7 @@ exports.processTransaction = async (input) => {
         vm._context.console = console;
         console.log('running VM')
         try {
-            vm.run(getCache('code', `contracts-${contract}-current`));
+            vm.run(getCache('code', `contracts/${contract}/current`));
         } catch (error) {
             console.error(error);
             const result = {};

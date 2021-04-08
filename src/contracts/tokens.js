@@ -14,11 +14,11 @@
       [typeof quantity === "string", "quantity must be a string: <quantity> <fron type> <to type>"],
       [!api.BigNumber(quantity).isNaN(), "quantity must be a number: <quantity> <from type> <to type>"]
     ]);
-    const token = await api.read("tokens-" + symbol);
-    const token2 = await api.read("tokens-" + symbol2);
+    const token = await api.read("tokens/" + symbol);
+    const token2 = await api.read("tokens/" + symbol2);
 
     const nonroot = symbol != ROOT_TOKEN ? symbol : symbol2;
-    const pool = await api.read("pool-" + nonroot);
+    const pool = await api.read("pool/" + nonroot);
 
     let poolbalance1 = parseFloat(pool[symbol]) || 0;
     let poolbalance2 = parseFloat(pool[symbol2]) || 0;
@@ -38,7 +38,7 @@
     pool[symbol2] = calculateBalance(pool[symbol2] || 0, quantity * ratio, 8, false);
     api.assert(pool[symbol2] > 0, 'pool overdrawn, needs more ' + symbol2);
 
-    await api.write('pool-' + nonroot, pool)
+    await api.write('pool/' + nonroot, pool)
 
     await addBalance(api.sender, token2, quantity * ratio);
 
@@ -53,13 +53,13 @@
 
   const addBalance = async (account, token, quantity, table = "balances", type = 'balance') => {
     quantity = api.BigNumber(quantity).toFixed(8);
-    let balance = await api.read(table + "-" + token.symbol + "-" + account);
+    let balance = await api.read(table + "/" + token.symbol + "/" + account);
     if (balance == null) {
       balance = balanceTemplate;
       balance.account = account;
       balance.symbol = token.symbol;
       balance.balance = calculateBalance('0', quantity, 8, true);
-      await api.write(table + "-" + token.symbol + "-" + account, balance);
+      await api.write(table + "/" + token.symbol + "/" + account, balance);
 
       return true;
     }
@@ -76,7 +76,7 @@
       "cannot add " + quantity + " to " + originalBalance
     );
 
-    await api.write(table + "-" + token.symbol + "-" + account, balance, type = 'balance');
+    await api.write(table + "/" + token.symbol + "/" + account, balance, type = 'balance');
     return true;
   };
 
@@ -93,7 +93,7 @@
 
   const subBalance = async (account, token, quantity, table = "balances", type = 'balance', sim = false) => {
     quantity = api.BigNumber(quantity).toFixed(8);
-    let balance = await api.read(table + "-" + token.symbol + "-" + account);
+    let balance = await api.read(table + "/" + token.symbol + "/" + account);
     if (!balance) throw new Error('You first need some ' + token.symbol)
     api.assert([
       [balance !== null, "balance does not exist"],
@@ -111,13 +111,13 @@
       api.BigNumber(balance.balance).lt(originalBalance),
       `cannot subtract ${quantity} ${token.symbol} from ${account} (BAL:${originalBalance})`
     );
-    await api.write(table + "-" + token.symbol + "-" + account, balance);
+    await api.write(table + "/" + token.symbol + "/" + account, balance);
 
     return true;
   };
 
   const addAccount = async (account, token) => {
-    await api.write("accounts-" + account + "-" + token.symbol, { enabled: true });
+    await api.write("accounts/" + account + "/" + token.symbol, { enabled: true });
   };
   const balanceTemplate = {
     account: null,
@@ -129,11 +129,11 @@
     invite: async payload => {
       payload[0] = payload[0].toUpperCase();
       const [symbol, invite] = payload;
-      const token = await api.read("tokens-" + symbol);
+      const token = await api.read("tokens/" + symbol);
       if (!token) throw new Error("token doesn't exist, did you spell it right?");
       api.assert(token.issuer === api.sender, "only the owner of the token can add invites");
       token.invite = invite;
-      await api.write("tokens-" + symbol, token);
+      await api.write("tokens/" + symbol, token);
     },
     create: async payload => {
       const symbol = payload[0].toUpperCase();
@@ -164,11 +164,11 @@
           `maxSupply must be lower than ${Number.MAX_SAFE_INTEGER}`
         ]
       ]);
-      const r = await api.read("tokens-" + ROOT_TOKEN);
+      const r = await api.read("tokens/" + ROOT_TOKEN);
 
       if (r) api.assert(await subBalance(api.sender, r, "10"), 'You need 10 C to create a token, pool your token and someone will dump in some C.' + ROOT_TOKEN);
 
-      const token = await api.read("tokens-" + symbol);
+      const token = await api.read("tokens/" + symbol);
       if (token) throw new Error(symbol + " already exists");
 
       const newToken = {
@@ -179,7 +179,7 @@
         supply: "0",
         circulatingSupply: "0"
       };
-      await api.write("tokens-" + symbol, newToken);
+      await api.write("tokens/" + symbol, newToken);
     },
     //migrate,
     issue: async payload => {
@@ -196,7 +196,7 @@
         ]
       ]);
 
-      let token = await api.read("tokens-" + symbol);
+      let token = await api.read("tokens/" + symbol);
       if (!token) throw new Error("Does not exist yet, use create first.");
       api.assert([
         [token.issuer === api.sender, "only the owner of the token can issue it"],
@@ -218,7 +218,7 @@
         token.precision,
         true
       );
-      await api.write("tokens-" + symbol, token);
+      await api.write("tokens/" + symbol, token);
       await addAccount(finalTo, token);
     },
     swap: async payload => {
@@ -246,15 +246,15 @@
       quantity = parseFloat(quantity);
       rootquantity = parseFloat(rootquantity);
 
-      const token = await api.read("tokens-" + symbol);
-      let pool = await api.read("pool-" + symbol);
+      const token = await api.read("tokens/" + symbol);
+      let pool = await api.read("pool/" + symbol);
       if (!pool) {
         pool = {};
         pool[ROOT_TOKEN] = 0
         pool[symbol] = 0;
         pool['rewards'] = 0
       }
-      const r = await api.read("tokens-" + ROOT_TOKEN);
+      const r = await api.read("tokens/" + ROOT_TOKEN);
       if (!token) throw new Error("does not exist")
 
       api.assert([
@@ -282,7 +282,7 @@
         token.precision,
         true
       );
-      await api.write("pool-" + symbol, pool);
+      await api.write("pool/" + symbol, pool);
     },
     transfer: async payload => {
       payload[2] = payload[2].toUpperCase();
@@ -295,7 +295,7 @@
         [!api.BigNumber(quantity).isNaN(), "quantity must be a number: <to> <quantity> <symbol>"],
         [finalTo.length, 'the to address must be filled in: <to> <quantity> <symbol>']
       ]);
-      const token = await api.read("tokens-" + symbol);
+      const token = await api.read("tokens/" + symbol);
       if (!token || !token.precision) throw new Error("does not exist");
       api.assert([
         [finalTo !== api.sender, "cannot transfer to self"],

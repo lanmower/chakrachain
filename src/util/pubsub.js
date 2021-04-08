@@ -1,70 +1,87 @@
-const hyperswarm = require("hyperswarm");
-const crypto = require("crypto");
-const { Packr } = require("msgpackr");
+const SDK = require('hyper-sdk');
+const { Packr } = require('msgpackr');
 let packr = new Packr();
 
-const getId = topic => {
-  return crypto
-    .createHash("sha256")
-    .update(topic || new Date().getTime().toString())
-    .digest();
-};
-
-function server(tstring) {
-  const topic = crypto
-    .createHash("sha256")
-    .update(tstring)
-    .digest();
-    console.log(tstring, topic.toString('hex'))
-  const localId = getId(crypto.randomBytes(30));
-  const swarm = hyperswarm();
-  swarm.join(topic, {
-    lookup: true,
-    announce: true
-  });
-  const funcmap = {};
-  const sockets = [];
-  swarm.on("connection", (socket, info) => {
-    socket.write(packr.pack({ id: localId.toString(), e: "r" }));
-    socket.on("data", async bytes => {
-      try {
-        const data = packr.unpack(bytes);
-        switch (data.e) {
-          case "r":
-            if (info.deduplicate(localId, Buffer.from(data.id, "binary"))) break;
-            sockets.push(socket);
-            break;
-          case "e":
-            const { a, p } = data;
-            if(typeof funcmap[a] == 'function')funcmap[a](p);
-            break;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    });
-  });
-  swarm.listen();
-
-  return {
-    on: (action, func) => {
-      funcmap[action] = func;
-    },
-    emit: async (action, payload) => {
-      const send = {
-        id: localId.toString(),
-        e: "e",
-        a: action,
-        p: payload
-      };
-      for (const socket of sockets) {
-        setTimeout(() => {
+exports.server = (name, options) => {
+  const ret = {};
+  const handlers = {};
+  SDK(options).then((sdk) => {
+    const Hypercore = sdk.Hypercore;
+    let callbacks = [];
+    const discoveryCore = new Hypercore(name)
+    console.log({diskey:discoveryCore.key.toString('hex')});
+    const on = (type, message, peer) => {
+      if (handlers[type]) {
+        for (hi in handlers[type]) {
           try {
-            socket.write(packr.pack(send));
-          } catch (e) {}
-        }, 0);
+            
+            handlers[type][hi](message, async (output) => {
+              extension.send(output, peer);
+            });
+          } catch (e) {
+            console.error(e);
+            delete handlers[type][hi]
+          }
+        }
       }
     }
+    const extension = discoveryCore.registerExtension('discovery', {
+      encoding: 'binary',
+      onmessage: (msg, peer) => {
+        const data = packr.unpack(msg);
+        console.log({data})
+        const message = packr.unpack(data.m);
+        const type = data.t;
+        on(type, message, peer)
+      }
+    })
+    const extension = discoveryCore.registerExtension('done', {
+      encoding: 'binary',
+      onmessage: (msg, peer) => {
+        const data = packr.unpack(msg);
+        console.log({data})
+        const message = packr.unpack(data.m);
+        callbacks[id].cb(message, peer);
+        delete callbacks[id];
+      }
+    })
+    peers = [];
+    discoveryCore.on("peer-add", peer => {
+      peers.push(peer);
+    });
+
+    for(let call in callbacks) {
+      const time = new Date().getTime();
+      if(time - callbacks[call].t > 60000) delete callbacks[call];
+    }
+    function genHexString(len) {
+      const hex = '0123456789ABCDEF';
+      let output = '';
+      for (let i = 0; i < len; ++i) {
+          output += hex.charAt(Math.floor(Math.random() * hex.length));
+      }
+      return output;
+    }
+    ret.emit = (type, message, cb) => {
+      on(type,message)
+      for (let peer in peers) {
+        try {
+          const i = genHexString(30);
+          if(cb) callbacks[i]={cb, t:new Date().getTime()};
+          extension.send(packr.pack({m:message,t:type, i}), peers[peer]);
+        } catch (e) {
+          delete peers[peer];
+        }
+      }
+    };
+    ret.close = sdk.close;
+  });
+  ret.on = (type,cb) => {
+    handlers[type] = handlers[type] || [];
+    handlers[type].push((msg)=>{
+      cb(msg)
+    });
   };
+
+  return ret;
 }
-module.exports = server;

@@ -1,4 +1,4 @@
-const hyperdrivestorage = require('./storage.js');
+const storage = require('./storage.js');
 
 const cache = {
 }
@@ -6,7 +6,7 @@ const cache = {
 exports.setCache = async (p, name, before = d => d) => {
     cache[name] = cache[name] || {};
     const update = async () => {
-        let src = await hyperdrivestorage.read(p);
+        let src = await storage.read(p);
         return {
             time: new Date().getTime(),
             value: before(src)

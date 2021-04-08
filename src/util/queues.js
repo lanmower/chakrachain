@@ -1,1 +1,0 @@
-const transactionBuffer = exports.transactionBuffer = [];

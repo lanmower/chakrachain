@@ -1,37 +1,20 @@
-const hyperdrivestorage = require('../util/storage.js');
-var hypercore = require('hypercore')
+const storage = require('../util/storage.js');
+var core = require('hypercore')
 const { Packr } = require('msgpackr');
 let packr = new Packr();
-var log = hypercore('./blocklog', { valueEncoding: 'binary' })
-var txlog = hypercore('./txlog', { valueEncoding: 'binary' })
+var log = core('./blocklog', { valueEncoding: 'binary' })
+var txlog = core('./txlog', { valueEncoding: 'binary' })
 const transactionBuffer = exports.transactionBuffer = [];
-require('../util/contracts.js').update(transactionBuffer);
 const { processTransaction } = require('./transaction.js');
 const { TRANSACTION, ERROR, HEIGHT, CALLBACK, WRITES, TRANSACTIONS } = require('../constants/constants.js');
-const pubsub = exports.pubsub = require("../util/pubsub.js")('chakrachain');
 
-pubsub.on('tx', (t) => {
+const pubsub = exports.pubsub = require("../util/pubsub.js").server('chakrachain');
+
+
+pubsub.on('tx', (t, cb) => {
+    t[CALLBACK] = cb;
     transactionBuffer.push(t);
 });
-
-const SDK = require('hyper-sdk');
-
-(async ()=>{
-    const sdk = await SDK({
-    });
-    const { Hypercore, close } = sdk
-    const discoveryCore = new Hypercore('chakrachain')
-    console.log(discoveryCore.key.toString('hex'));
-
-    discoveryCore.registerExtension('discovery', {
-        encoding: 'binary',
-        onmessage: (message, peer) => {
-            console.log(JSON.parse(message.toString()))
-            transactionBuffer.push(JSON.parse(message.toString()))
-        }
-    })
-})()
-
 
 const logGet = (i) => {
     return new Promise(resolve => {
@@ -65,15 +48,15 @@ const createBlock = exports.createBlock = async (transactionBuffer) => {
                 const output = {};
                 const tx = block[TRANSACTIONS][h];
                 for (write in tx[WRITES]) {
-                    await hyperdrivestorage.write(write, tx[WRITES][write]);
+                    await storage.write(write, tx[WRITES][write]);
                 }
                 output[HEIGHT] = txlog.length;
                 output[TRANSACTION] = tx;
-                await txlog.append(packr.pack(output));
+                txlog.append(packr.pack(output));
             }
             if (block[TRANSACTIONS].length) {
-                await log.append(packr.pack(block));
-                console.log('done processing ', block.height)
+                log.append(packr.pack(block));
+                console.log('done processing ', block)
                 block.log = log.key;
                 block.txlog = txlog.key;
                 pubsub.emit("block", block);

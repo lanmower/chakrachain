@@ -1,31 +1,17 @@
-var Hyperdrive = require('hyperdrive')
-var drive = new Hyperdrive('./state')
-const hyperswarm = require("hyperswarm");
-const pump = require('pump')
-drive = new Hyperdrive("./state");
-drive.ready(() => {
-  const swarm = hyperswarm();
-  swarm.on("connection", (connection, info) => {
-    pump(
-      connection,
-      drive.replicate({ initiator: info.client }),
-      connection
-    );
-  });
-  swarm.join(drive.discoveryKey, {
-    announce: true,
-    lookup: true
-  });
-  console.log(drive.version);
-  setInterval(()=>{console.log(drive.peers.length)}, 30000)
-  console.log(drive.key.toString('hex'));
-});
-
+const SDK = require('hyper-sdk');
+var drive = null;
 const { Packr } = require('msgpackr');
 let packr = new Packr();
 
-const read = (p) => {
-    path = p.replaceAll('-', '/');
+SDK({}).then(sdk=>{
+    drive = new sdk.Hyperdrive('chakrachain');
+    drive.ready().then(()=>{
+        console.log({key:drive.key});
+    })
+})
+
+const read = (path) => {
+    console.log(path);
     return new Promise(resolve => {
         try {
             drive.readFile(path, 'binary', function (err, data) {
@@ -33,20 +19,18 @@ const read = (p) => {
                 else resolve(null)
             })
         } catch (e) {
-
+            resolve(null);
         }
     });
 }
-const write = (p, value) => {
-    path = p.replaceAll('-', '/');
+const write = (path, value) => {
     return new Promise(resolve => {
         drive.writeFile(path, packr.pack(value), function (err) {
             resolve(err || true);
         });
     })
 }
-const ls = (p) => {
-    path = p.replaceAll('-', '/');
+const ls = (path) => {
     return new Promise(resolve => {
         drive.readdir(path, function (err, list) {
             if (!err) resolve(list)
@@ -55,4 +39,7 @@ const ls = (p) => {
     })
 }
 
-module.exports = { read, write, ls };
+
+const funcs = { read, write, ls };
+
+module.exports = funcs;

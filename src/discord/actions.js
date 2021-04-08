@@ -4,9 +4,10 @@ const { BigNumber } = require("bignumber.js");
 const ROOT_TOKEN = 'C';
 const keys = require('../util/keys.js')
 const crypto = require('../util/crypto.js');
-const hyperdrivestorage = require('../util/storage.js');
+const storage = require('../util/storage.js');
 const { TRANSACTION, CALLBACK, PUBLICKEY, CONTRACT, ACTION, INPUT, SENDER, ERROR, HEIGHT } = require('../constants/constants.js');
-const transact = (msg, transactionBuffer, action, payload, response) => {
+const pubsub = require("../blockchain/chain.js").pubsub;
+const transact = (msg, action, payload, response) => {
     const input = {};
     input[CONTRACT] = keys.publicKey;
     input[ACTION] = action.names[0];
@@ -34,20 +35,20 @@ const transact = (msg, transactionBuffer, action, payload, response) => {
                 resolve(output);
             }
         }
-        transactionBuffer.push(out);
+        pubsub.emit('tx', out);
     })
 
 }
 
-const create = async (msg, action, payload, transactionBuffer) => {
+const create = async (msg, action, payload) => {
     if (!payload.length) {
         msg.channel.send('please specify symbol (less than 10 letters, case insensitive)');
         return;
     }
-    transact(msg, transactionBuffer, action, payload, "Created " + payload[0] + ", subtracted 10 C");
+    transact(msg, action, payload, "Created " + payload[0] + ", subtracted 10 C");
 }
 
-const invite = async (msg, action, payload, transactionBuffer) => {
+const invite = async (msg, action, payload) => {
     let channel = msg.channel;
     try {
         const invite = await channel.createInvite({ maxAge: 0, unique: true });
@@ -63,13 +64,13 @@ const invite = async (msg, action, payload, transactionBuffer) => {
         const d = payload.join(' ');
         payload = [symbol];
         payload.push({ c: invite.code, n, d, gid, cid, i, ts: new Date().getTime() })
-        transact(msg, transactionBuffer, action, payload, "Edited " + payload[0]);
+        transact(msg, action, payload, "Edited " + payload[0]);
     } catch (e) {
         msg.channel.send("ERROR: " + e.getmessage);
     }
 }
 
-const issue = async (msg, action, payload, transactionBuffer) => {
+const issue = async (msg, action, payload) => {
     if (payload[0].startsWith("<@"))
         payload[0] = payload[0].replace("<@", "").replace('!', '').replace(">", "");
     if (payload.length < 2) {
@@ -86,14 +87,14 @@ const issue = async (msg, action, payload, transactionBuffer) => {
     if (!isNumeric(payload[0])) throw Error('Bad account:', payload[0]);
     response = `Issued ${payload[1]} ${payload[2].toUpperCase()} to <@!${payload[0]}>`;
 
-    transact(msg, transactionBuffer, action, payload, response);
+    transact(msg, action, payload, response);
 }
-const migrate = async (msg, action, payload, transactionBuffer) => {
+const migrate = async (msg, action, payload) => {
     response = `Done`;
-    transact(msg, transactionBuffer, action, payload, response);
+    transact(msg, action, payload, response);
 }
 
-const faucet = async (msg, action, payload, transactionBuffer, channel, author) => {
+const faucet = async (msg, action, payload, channel, author) => {
     if(!channel) channel=msg.channel;
     if(!author) author=msg.author;
     if (payload.length < 2) {
@@ -101,8 +102,8 @@ const faucet = async (msg, action, payload, transactionBuffer, channel, author) 
         return;
     }
     payload[1] = payload[1].toUpperCase();
-    const path = `contracts-${keys.publicKey}-balances-${payload[1]}-${author.id}`;
-    const loaded = await hyperdrivestorage.read(path);
+    const path = `contracts/${keys.publicKey}/balances/${payload[1]}/${author.id}`;
+    const loaded = await storage.read(path);
     if (parseFloat(payload[0]) > parseFloat(loaded.balance)) await channel.send('You need more ' + payload[1])
     const filter = reaction => reaction.emoji.name === '🍆';
     const rep = await channel.send(payload[0] + ' ' + payload[1] + ' available, click on the emoji!')
@@ -116,11 +117,10 @@ const faucet = async (msg, action, payload, transactionBuffer, channel, author) 
                 if (users.includes(msg.author.id)) delete users[msg.author.id];
                 for (user of users) {
                     if (user != '726135294952341575' && user != msg.author.id) {
-                        //codecid, msg, transactionBuffer, action, payload, response
                         const userCount = users.length - 1;
                         const input = parseFloat(payload[0]);
                         const quantity = new BigNumber(input / userCount).toFixed(8)
-                        await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, transactionBuffer, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` ${payload[1]} to <@!${user}>`, (resp) => {
+                        await transact({ reply: msg.channel.send, channel: msg.channel, author: { id: msg.author.id } }, { names: ['transfer'] }, [user, quantity, payload[1]], 'Sent ' + quantity + ` ${payload[1]} to <@!${user}>`, (resp) => {
                         });
                     }
                 }
@@ -136,7 +136,7 @@ const faucet = async (msg, action, payload, transactionBuffer, channel, author) 
     return ret;
 }
 
-const transfer = async (msg, action, payload, transactionBuffer) => {
+const transfer = async (msg, action, payload) => {
     if (payload[0].startsWith("<@"))
         payload[0] = payload[0].replace("<@", "").replace('!', '').replace(">", "");
     if (payload.length < 3) {
@@ -144,22 +144,22 @@ const transfer = async (msg, action, payload, transactionBuffer) => {
         return;
     }
     //if (!isNumeric(payload[0])) throw Error('Bad account:', payload[0]);
-    transact(msg, transactionBuffer, action, payload, `Transferred ${payload[1]} ${payload[2].toUpperCase()} to <@!${payload[0]}>`);
+    transact(msg, action, payload, `Transferred ${payload[1]} ${payload[2].toUpperCase()} to <@!${payload[0]}>`);
 
 }
 
-const balances = async (msg, action, payload, transactionBuffer) => {
-    const path = `contracts-${keys.publicKey}-accounts-` + msg.author.id;
+const balances = async (msg, action, payload) => {
+    const path = `contracts/${keys.publicKey}/accounts/` + msg.author.id;
     const exampleEmbed = new Discord.MessageEmbed()
         .setTitle('BALANCES')
         .setAuthor('Chakrachain', 'https://i.imgflip.com/r1u53.jpg', 'https://discord.js.org')
         .setFooter('Chakrachain');
     try {
-        const files = await hyperdrivestorage.ls(path);
+        const files = await storage.ls(path);
 
         for (const fi of files) {
-            const loaded = await hyperdrivestorage.read(`contracts-${keys.publicKey}-balances-${fi}-${msg.author.id}`);
-            const token = await hyperdrivestorage.read(`contracts-${keys.publicKey}-tokens-${fi}`);
+            const loaded = await storage.read(`contracts/${keys.publicKey}/balances/${fi}/${msg.author.id}`);
+            const token = await storage.read(`contracts/${keys.publicKey}/tokens/${fi}`);
             if (loaded) exampleEmbed.addFields({ name: fi, value: (typeof token.invite == 'object' ? `\n[Join Discord](https://discord.gg/${token.invite.c})\n` : '') + loaded.balance, inline: true });
         }
         const sent = await msg.channel.send(exampleEmbed);
@@ -178,17 +178,17 @@ const calculateBalance = (balance, quantity, precision, add) =>
             .minus(quantity)
             .toFixed(precision);
 
-const pools = async (msg, action, payload, transactionBuffer) => {
-    const path = `contracts-${keys.publicKey}-pool`;
+const pools = async (msg, action, payload) => {
+    const path = `contracts/${keys.publicKey}/pool`;
     const exampleEmbed = new Discord.MessageEmbed()
         .setTitle('POOL PRICES')
         .setAuthor('Chakrachain', 'https://i.imgflip.com/r1u53.jpgjpeg', 'https://discord.js.org')
         .setFooter('Chakrachain');
     fields = [];
-    const files = await hyperdrivestorage.ls(path)
+    const files = await storage.ls(path)
     for (const fi of files) {
-        const token = await hyperdrivestorage.read(`contracts-${keys.publicKey}-tokens-${fi}`);
-        const pool = await hyperdrivestorage.read(`contracts-${keys.publicKey}-pool-${fi}`);
+        const token = await storage.read(`contracts/${keys.publicKey}/tokens/${fi}`);
+        const pool = await storage.read(`contracts/${keys.publicKey}/pool/${fi}`);
         let poolbalance1 = parseFloat(pool[token.symbol]);
         let poolbalance2 = parseFloat(pool[ROOT_TOKEN]);
         let ratio = poolbalance2 / poolbalance1;
@@ -209,13 +209,13 @@ const pools = async (msg, action, payload, transactionBuffer) => {
     setTimeout(() => { if (sent.delete) sent.delete().catch(() => { }) }, 30000)
 }
 
-const balance = async (msg, action, payload, transactionBuffer) => {
+const balance = async (msg, action, payload) => {
     if (payload.length < 1) {
         msg.channel.send('Please specify tradable.');
     }
     payload[0] = payload[0].toUpperCase();
-    const path = `contracts-${keys.publicKey}-balances-${payload[0]}-${msg.author.id}`;
-    const loaded = await hyperdrivestorage.read(path);
+    const path = `contracts/${keys.publicKey}/balances/${payload[0]}/${msg.author.id}`;
+    const loaded = await storage.read(path);
     response = `Balance for <@!${msg.author.id}> ${loaded.balance} ${payload[0]}`;
     const exampleEmbed = new Discord.MessageEmbed()
         .setTitle('BALANCE')
@@ -275,7 +275,7 @@ invite this bot to your discord
 \`\`\``);
 }
 
-const pool = async (msg, action, payload, transactionBuffer) => {
+const pool = async (msg, action, payload) => {
     if (payload.length < 1) {
         msg.channel.send('not enough params');
         return;
@@ -287,14 +287,14 @@ const pool = async (msg, action, payload, transactionBuffer) => {
     }
     payload[1] = payload[1].toUpperCase();
     response = `Pooled ${payload[0]} ${payload[1]} against ${payload[2]} ` + ROOT_TOKEN;
-    transact(msg, transactionBuffer, action, payload, response);
+    transact(msg, action, payload, response);
 }
 
 const link = async (msg) => {
     msg.channel.send('https://discord.com/api/oauth2/authorize?client_id=726135294952341575&permissions=18497&scope=bot');
 }
 
-const swap = async (msg, action, payload, transactionBuffer) => {
+const swap = async (msg, action, payload) => {
     if (payload.length < 1) {
         msg.channel.send('not enough params');
         return;
@@ -310,7 +310,7 @@ const swap = async (msg, action, payload, transactionBuffer) => {
     symbol2 = payload[2].toUpperCase();
     const notroot = symbol1 != ROOT_TOKEN ? symbol1 : symbol2;
     const calcRatio = async (symbol1, symbol2) => {
-        const pool = await hyperdrivestorage.read(`contracts-${keys.publicKey}-pool-${symbol1}`);
+        const pool = await storage.read(`contracts/${keys.publicKey}/pool/${symbol1}`);
         let poolbalance1 = parseFloat(pool[symbol1]);
         let poolbalance2 = parseFloat(pool[symbol2]);
         return poolbalance2 / poolbalance1;
@@ -324,7 +324,7 @@ const swap = async (msg, action, payload, transactionBuffer) => {
         ratio = ratio2 / ratio1;
     }
     response = `Swapped ${payload[0]} ${symbol1} for ${calculateBalance(0, quantity * ratio, 8, true)} ${symbol2}`;
-    transact(msg, transactionBuffer, action, payload, response);
+    transact(msg, action, payload, response);
 }
 let faucets = 0;
 exports.actions = [
@@ -366,7 +366,7 @@ exports.actions = [
     },
     {
         names: ['autofaucet'],
-        call: (msg, action, payload, transactionBuffer) => {
+        call: (msg, action, payload) => {
             let times = parseInt(payload[2]);
             if (times > 10) times = 10;
             ++faucets;
@@ -377,17 +377,21 @@ exports.actions = [
                         clearInterval(int);
                     }
 
-                    const path = `contracts-${keys.publicKey}-balances-${payload[1].toUpperCase()}-${msg.author.id}`;
-                    const loaded = await hyperdrivestorage.read(path);
+                    const path = `contracts/${keys.publicKey}/balances/${payload[1].toUpperCase()}/${msg.author.id}`;
+                    const loaded = await storage.read(path);
                     if (loaded.balance < parseFloat(payload[1])) {
                         --faucets;
                         clearInterval(int);
                     }
-                    if (await faucet(msg, action, payload, transactionBuffer, msg.channel, msg.author)) times--;
+                    if (await faucet(msg, action, payload, msg.channel, msg.author)) times--;
+                    else {
+                        clearInterval(int);
+                        return;
+                    }
                 } catch (e) {
                     console.log(e);
-                    --faucets;
                     clearInterval(int);
+                    return;
                 }
             }
             const int = setInterval(run, 11000);

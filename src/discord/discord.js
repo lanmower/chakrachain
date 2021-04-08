@@ -1,5 +1,4 @@
 let client;
-const {transactionBuffer} = require('../blockchain/chain.js');
 const { actions } = require("./actions.js");
 const Discord = require("discord.js");
 
@@ -15,12 +14,13 @@ client.on("message", async msg => {
         for (action of actions) {
             if (action.names.includes(name)) {
                 try {
-                    msg.channel.startTyping();
-                    await action.call(msg, action, payload, transactionBuffer);
-                } catch (e) {
+                    //msg.channel.startTyping();
+                    action.call(msg, action, payload).catch(console.error);
+                    console.log('ran');
+                } catch(e) {
+                    console.log('error');
                     console.error(e);
-                } finally {
-                    msg.channel.stopTyping();
+                    msg.reply('ERROR:'+e);
                 }
             }
         }

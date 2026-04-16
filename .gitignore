@@ -1,7 +1,7 @@
 node_modules
-.env
 backup
 block
 txlog
 blocklog
 state
+config.bat
